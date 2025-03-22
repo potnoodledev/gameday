@@ -6,10 +6,38 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 animationBackground.appendChild(canvas);
 
+// Performance settings
+const performance = {
+    high: {
+        particleCount: 100,
+        connectionDistance: 150,
+        floatingElements: 15
+    },
+    medium: {
+        particleCount: 60,
+        connectionDistance: 120,
+        floatingElements: 10
+    },
+    low: {
+        particleCount: 30,
+        connectionDistance: 100,
+        floatingElements: 5
+    }
+};
+
+// Detect device performance
+const isLowEndDevice = () => {
+    return window.navigator.hardwareConcurrency <= 4 || 
+           /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Select performance profile
+const currentPerformance = isLowEndDevice() ? performance.low : performance.medium;
+
 // Animation parameters
 const config = {
-    particleCount: 100,
-    connectionDistance: 150,
+    particleCount: currentPerformance.particleCount,
+    connectionDistance: currentPerformance.connectionDistance,
     particleSize: 3,
     particleMinSpeed: 0.2,
     particleMaxSpeed: 0.8,
@@ -75,32 +103,29 @@ class Particle {
 
 // Draw connections between particles
 function drawConnections(particles) {
-    for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-            const dx = particles[i].x - particles[j].x;
-            const dy = particles[i].y - particles[j].y;
+    // Only check connections for visible particles
+    const visibleParticles = particles.filter(p => 
+        p.x >= -config.connectionDistance && 
+        p.x <= canvas.width + config.connectionDistance &&
+        p.y >= -config.connectionDistance && 
+        p.y <= canvas.height + config.connectionDistance
+    );
+
+    for (let i = 0; i < visibleParticles.length; i++) {
+        for (let j = i + 1; j < visibleParticles.length; j++) {
+            const dx = visibleParticles[i].x - visibleParticles[j].x;
+            const dy = visibleParticles[i].y - visibleParticles[j].y;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < config.connectionDistance) {
-                // Calculate opacity based on distance
                 const opacity = (1 - distance / config.connectionDistance) * config.connectionOpacity;
                 
-                // Create gradient between the two particles
-                const gradient = ctx.createLinearGradient(
-                    particles[i].x, particles[i].y, 
-                    particles[j].x, particles[j].y
-                );
-                gradient.addColorStop(0, particles[i].color);
-                gradient.addColorStop(1, particles[j].color);
-                
                 ctx.beginPath();
-                ctx.moveTo(particles[i].x, particles[i].y);
-                ctx.lineTo(particles[j].x, particles[j].y);
-                ctx.strokeStyle = gradient;
-                ctx.globalAlpha = opacity;
+                ctx.moveTo(visibleParticles[i].x, visibleParticles[i].y);
+                ctx.lineTo(visibleParticles[j].x, visibleParticles[j].y);
+                ctx.strokeStyle = `rgba(138, 43, 226, ${opacity})`; // Simplified color
                 ctx.lineWidth = 1;
                 ctx.stroke();
-                ctx.globalAlpha = 1;
             }
         }
     }
@@ -360,42 +385,57 @@ class FloatingElement {
 
 // Initialize floating elements
 const floatingElements = [];
-for (let i = 0; i < 15; i++) {
+for (let i = 0; i < currentPerformance.floatingElements; i++) {
     floatingElements.push(new FloatingElement());
 }
 
-// Animation loop
-function animate() {
+// Optimize window resize with throttling
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }, 250);
+});
+
+// Optimize animation loop with requestAnimationFrame throttling
+let lastTime = 0;
+const targetFPS = 30;
+const frameInterval = 1000 / targetFPS;
+
+function animate(currentTime) {
+    if (currentTime - lastTime < frameInterval) {
+        requestAnimationFrame(animate);
+        return;
+    }
+    lastTime = currentTime;
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw floating elements
-    floatingElements.forEach(element => {
-        element.update();
-        element.draw();
-    });
+    // Draw floating elements (reduced frequency)
+    if (currentTime % 2 === 0) {
+        floatingElements.forEach(element => {
+            element.update();
+            element.draw();
+        });
+    }
     
-    // Update all particles
+    // Update particles
     particles.forEach(particle => particle.update());
     
     // Handle mouse interaction
     const allParticles = handleMouseInteraction(particles);
     
-    // Draw connections first (under particles)
+    // Draw connections
     drawConnections(allParticles);
     
-    // Draw all particles
+    // Draw particles
     allParticles.forEach(particle => particle.draw());
     
-    // Loop the animation
     requestAnimationFrame(animate);
 }
 
-// Handle window resize
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
-
 // Start animation
-animate(); 
+animate(0); 
