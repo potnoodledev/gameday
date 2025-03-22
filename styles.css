@@ -290,52 +290,72 @@ section {
 
 /* Featured Games Section */
 .featured {
+    padding: 4rem 2rem;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    color: white;
+}
+
+.featured h2 {
     text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+    color: #ffd700;
 }
 
-.games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 2rem;
-    margin-top: 3rem;
+.featured-game {
+    max-width: 100%;
+    margin: 0 auto;
 }
 
-.game-card {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    overflow: hidden;
-    transition: var(--transition);
-}
-
-.game-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-}
-
-.game-thumbnail {
-    height: 180px;
-    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+.game-container {
     position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    background: #000;
     overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-.game-thumbnail:before {
-    content: '';
+.game-container iframe {
     position: absolute;
-    width: 150%;
-    height: 150%;
-    background: radial-gradient(circle, transparent 30%, rgba(0, 0, 0, 0.7) 70%);
-    top: -25%;
-    left: -25%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
 }
 
-.game-card h3 {
-    padding: 1.5rem 1.5rem 0.5rem;
+.game-info {
+    padding: 2rem;
+    text-align: center;
+    max-width: 800px;
+    margin: 2rem auto 0;
 }
 
-.game-card p {
-    padding: 0 1.5rem 1.5rem;
-    color: var(--gray-text);
+.game-info h3 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: #ffd700;
+}
+
+.game-info p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #e0e0e0;
+}
+
+.game-stats {
+    display: flex;
+    gap: 2rem;
+    font-size: 1.2rem;
+    color: #ffd700;
+}
+
+.game-stats span {
+    background: rgba(255, 215, 0, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.3);
 }
 
 /* Footer */
@@ -406,5 +426,9 @@ footer {
     
     .footer-links ul {
         justify-content: center;
+    }
+    
+    .game-container {
+        padding-top: 75%; /* 4:3 Aspect Ratio for mobile */
     }
 } 
