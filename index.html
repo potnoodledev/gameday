@@ -51,6 +51,13 @@
         </div>
     </section>
 
+    <section class="explore-games">
+        <h2>Explore Games</h2>
+        <div class="games-grid" id="games-grid">
+            <div class="loading">Loading games...</div>
+        </div>
+    </section>
+
     <section class="tournament">
         <h2>The Tournament</h2>
         <div class="bracket-preview">
@@ -107,5 +114,142 @@
     </footer>
 
     <script src="animation.js"></script>
+    <script type="module">
+        // GitHub API configuration
+        const GITHUB_API = 'https://api.github.com';
+        const REPO_OWNER = 'potnoodledev';
+        const REPO_NAME = '03-22-vibejam';
+
+        // Fetch branches from GitHub with retry logic
+        async function fetchBranches(retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/branches`, {
+                        headers: {
+                            'Accept': 'application/vnd.github.v3+json',
+                            'User-Agent': 'Vibejam-Games-Explorer'
+                        }
+                    });
+                    
+                    if (response.status === 403) {
+                        // Rate limit hit, wait and retry
+                        const retryAfter = response.headers.get('Retry-After') || 60;
+                        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                        continue;
+                    }
+                    
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const branches = await response.json();
+                    return branches;
+                } catch (error) {
+                    console.error(`Attempt ${i + 1} failed:`, error);
+                    if (i === retries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                }
+            }
+            return [];
+        }
+
+        // Create game card HTML with loading state
+        function createGameCard(branch) {
+            const gameUrl = `https://${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
+            const formattedName = branch.name
+                .replace(/-/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase())
+                .replace(/\b\d+/g, '');
+            
+            // Safely get the last update date with fallback
+            const lastUpdate = branch.commit?.commit?.author?.date 
+                ? new Date(branch.commit.commit.author.date).toLocaleDateString()
+                : 'Unknown date';
+            
+            return `
+                <div class="game-card" data-branch="${branch.name}">
+                    <div class="game-preview">
+                        <div class="game-loading">
+                            <div class="spinner"></div>
+                            <p>Loading game...</p>
+                        </div>
+                        <iframe 
+                            src="${gameUrl}" 
+                            frameborder="0" 
+                            allowfullscreen
+                            onload="this.parentElement.classList.remove('loading')"
+                            onerror="this.parentElement.classList.add('error')"
+                        ></iframe>
+                    </div>
+                    <div class="game-info">
+                        <h3>${formattedName}</h3>
+                        <p>Last updated: ${lastUpdate}</p>
+                        <div class="game-status"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize games grid with error handling
+        async function initializeGamesGrid() {
+            const gamesGrid = document.getElementById('games-grid');
+            gamesGrid.innerHTML = '<div class="loading">Loading games...</div>';
+            
+            try {
+                const branches = await fetchBranches();
+                
+                if (branches.length === 0) {
+                    gamesGrid.innerHTML = `
+                        <div class="error">
+                            <p>Failed to load games. Please try again later.</p>
+                            <button onclick="window.location.reload()" class="btn secondary">Retry</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Debug log the first branch to understand the structure
+                console.log('First branch data:', branches[0]);
+
+                const gameBranches = branches.filter(branch => 
+                    branch.name !== 'main' && 
+                    branch.name !== 'master' &&
+                    !branch.name.startsWith('gh-pages')
+                );
+
+                if (gameBranches.length === 0) {
+                    gamesGrid.innerHTML = `
+                        <div class="error">
+                            <p>No games found. Be the first to submit a game!</p>
+                            <a href="#" class="btn primary">Submit Your Game</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const gamesHTML = gameBranches.map(branch => createGameCard(branch)).join('');
+                gamesGrid.innerHTML = gamesHTML;
+
+                // Add error handling for iframes
+                const iframes = gamesGrid.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    iframe.addEventListener('error', () => {
+                        const card = iframe.closest('.game-card');
+                        const status = card.querySelector('.game-status');
+                        status.innerHTML = '<span class="error">Game failed to load</span>';
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error initializing games grid:', error);
+                gamesGrid.innerHTML = `
+                    <div class="error">
+                        <p>Failed to load games. Please try again later.</p>
+                        <button onclick="window.location.reload()" class="btn secondary">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initializeGamesGrid);
+    </script>
 </body>
 </html> 
