@@ -117,30 +117,45 @@
     <script type="module">
         // GitHub API configuration
         const GITHUB_API = 'https://api.github.com';
-        const REPO_OWNER = 'potnoodledev';
+        const REPO_OWNER = 'urtimus-prime';
         const REPO_NAME = '03-22-vibejam';
+        
+        // API to retrieve deployment urls, returns array of objects including name and deploymentUrl
+        const DEPLOYMENT_API = `https://github-helper-ecaj8wink.replit.app/api/repos/${REPO_OWNER}/${REPO_NAME}/branches`;
 
         // Fetch branches from GitHub with retry logic
         async function fetchBranches(retries = 3) {
             for (let i = 0; i < retries; i++) {
                 try {
-                    const response = await fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/branches`, {
-                        headers: {
-                            'Accept': 'application/vnd.github.v3+json',
-                            'User-Agent': 'Vibejam-Games-Explorer'
-                        }
-                    });
+                    // Fetch both branches and deployment URLs
+                    const [branchesResponse, deploymentsResponse] = await Promise.all([
+                        fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/branches`, {
+                            headers: {
+                                'Accept': 'application/vnd.github.v3+json',
+                                'User-Agent': 'Vibejam-Games-Explorer'
+                            }
+                        }),
+                        fetch(DEPLOYMENT_API)
+                    ]);
                     
-                    if (response.status === 403) {
+                    if (branchesResponse.status === 403 || deploymentsResponse.status === 403) {
                         // Rate limit hit, wait and retry
-                        const retryAfter = response.headers.get('Retry-After') || 60;
+                        const retryAfter = branchesResponse.headers.get('Retry-After') || 60;
                         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
                         continue;
                     }
                     
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const branches = await response.json();
-                    return branches;
+                    if (!branchesResponse.ok) throw new Error(`HTTP error! status: ${branchesResponse.status}`);
+                    if (!deploymentsResponse.ok) throw new Error(`HTTP error! status: ${deploymentsResponse.status}`);
+                    
+                    const branches = await branchesResponse.json();
+                    const deployments = await deploymentsResponse.json();
+                    
+                    // Merge deployment URLs with branch data
+                    return branches.map(branch => ({
+                        ...branch,
+                        deploymentUrl: deployments.find(d => d.name === branch.name)?.deploymentUrl
+                    }));
                 } catch (error) {
                     console.error(`Attempt ${i + 1} failed:`, error);
                     if (i === retries - 1) throw error;
@@ -152,7 +167,7 @@
 
         // Create game card HTML with loading state
         function createGameCard(branch) {
-            const gameUrl = `https://${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
+            const gameUrl = branch.deploymentUrl || `${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
             const formattedName = branch.name
                 .replace(/-/g, ' ')
                 .replace(/\b\w/g, l => l.toUpperCase())
@@ -171,16 +186,15 @@
                             <p>Loading game...</p>
                         </div>
                         <iframe 
-                            src="${gameUrl}" 
+                            src="https://${gameUrl}" 
                             frameborder="0" 
                             allowfullscreen
-                            onload="this.parentElement.classList.remove('loading')"
-                            onerror="this.parentElement.classList.add('error')"
+                            onload="this.parentElement.querySelector('.game-loading').style.display='none'"
+                            onerror="this.parentElement.querySelector('.game-loading').innerHTML='<p>Failed to load game</p>'"
                         ></iframe>
                     </div>
                     <div class="game-info">
                         <h3>${formattedName}</h3>
-                        <p>Last updated: ${lastUpdate}</p>
                         <div class="game-status"></div>
                     </div>
                 </div>

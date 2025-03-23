@@ -331,6 +331,22 @@ section {
     color: #e0e0e0;
 }
 
+.deployment-url {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--secondary-color);
+}
+
+.deployment-url a {
+    color: var(--secondary-color);
+    text-decoration: underline;
+    word-break: break-all;
+}
+
+.deployment-url a:hover {
+    color: var(--accent-color);
+}
+
 .game-status {
     margin-top: 0.5rem;
 }
