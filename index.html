@@ -53,8 +53,26 @@
 
     <section class="explore-games">
         <h2>Explore Games</h2>
-        <div class="games-grid" id="games-grid">
-            <div class="loading">Loading games...</div>
+        <div class="game-layout">
+            <div class="game-sidebar">
+                <div class="search-box">
+                    <input type="text" id="gameSearch" placeholder="Search games..." class="search-input">
+                    <div class="search-icon">🔍</div>
+                </div>
+                <div class="game-list" id="gameList">
+                    <div class="loading">Loading games...</div>
+                </div>
+            </div>
+            <div class="game-main">
+                <div class="game-header" id="gameHeader">
+                    <h3>Select a game to play</h3>
+                </div>
+                <div class="selected-game-container" id="selectedGameContainer">
+                    <div class="no-game-selected">
+                        <p>Select a game from the list to play</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -201,16 +219,34 @@
             `;
         }
 
-        // Initialize games grid with error handling
-        async function initializeGamesGrid() {
-            const gamesGrid = document.getElementById('games-grid');
-            gamesGrid.innerHTML = '<div class="loading">Loading games...</div>';
+        // Create game list item HTML
+        function createGameListItem(branch) {
+            const formattedName = branch.name
+                .replace(/-/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase())
+                .replace(/\b\d+/g, '');
+            
+            return `
+                <div class="game-item" data-branch="${branch.name}">
+                    <h3>${formattedName}</h3>
+                    <p class="game-description">Click to play</p>
+                </div>
+            `;
+        }
+
+        // Initialize game list with search functionality
+        async function initializeGameList() {
+            const gameList = document.getElementById('gameList');
+            const selectedGameContainer = document.getElementById('selectedGameContainer');
+            const searchInput = document.getElementById('gameSearch');
+            
+            gameList.innerHTML = '<div class="loading">Loading games...</div>';
             
             try {
                 const branches = await fetchBranches();
                 
                 if (branches.length === 0) {
-                    gamesGrid.innerHTML = `
+                    gameList.innerHTML = `
                         <div class="error">
                             <p>Failed to load games. Please try again later.</p>
                             <button onclick="window.location.reload()" class="btn secondary">Retry</button>
@@ -219,9 +255,6 @@
                     return;
                 }
 
-                // Debug log the first branch to understand the structure
-                console.log('First branch data:', branches[0]);
-
                 const gameBranches = branches.filter(branch => 
                     branch.name !== 'main' && 
                     branch.name !== 'master' &&
@@ -229,7 +262,7 @@
                 );
 
                 if (gameBranches.length === 0) {
-                    gamesGrid.innerHTML = `
+                    gameList.innerHTML = `
                         <div class="error">
                             <p>No games found. Be the first to submit a game!</p>
                             <a href="#" class="btn primary">Submit Your Game</a>
@@ -238,32 +271,189 @@
                     return;
                 }
 
-                const gamesHTML = gameBranches.map(branch => createGameCard(branch)).join('');
-                gamesGrid.innerHTML = gamesHTML;
+                // Create and display game list
+                const gamesHTML = gameBranches.map(branch => createGameListItem(branch)).join('');
+                gameList.innerHTML = gamesHTML;
 
-                // Add error handling for iframes
-                const iframes = gamesGrid.querySelectorAll('iframe');
-                iframes.forEach(iframe => {
-                    iframe.addEventListener('error', () => {
-                        const card = iframe.closest('.game-card');
-                        const status = card.querySelector('.game-status');
-                        status.innerHTML = '<span class="error">Game failed to load</span>';
+                // Add click handlers to game items
+                const gameItems = gameList.querySelectorAll('.game-item');
+                gameItems.forEach(item => {
+                    item.addEventListener('click', () => {
+                        const branch = gameBranches.find(b => b.name === item.dataset.branch);
+                        if (branch) {
+                            // Update selected state
+                            gameItems.forEach(i => i.classList.remove('selected'));
+                            item.classList.add('selected');
+
+                            // Update game header with game name
+                            const gameHeader = document.getElementById('gameHeader');
+                            const formattedName = branch.name
+                                .replace(/-/g, ' ')
+                                .replace(/\b\w/g, l => l.toUpperCase())
+                                .replace(/\b\d+/g, '');
+                            gameHeader.innerHTML = `<h3>${formattedName}</h3>`;
+
+                            // Display selected game
+                            const gameUrl = branch.deploymentUrl || `${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
+                            selectedGameContainer.innerHTML = `
+                                <iframe 
+                                    src="https://${gameUrl}" 
+                                    class="game-frame"
+                                    frameborder="0" 
+                                    allowfullscreen
+                                ></iframe>
+                            `;
+                        }
+                    });
+                });
+
+                // Add search functionality
+                searchInput.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    gameItems.forEach(item => {
+                        const gameName = item.querySelector('h3').textContent.toLowerCase();
+                        item.style.display = gameName.includes(searchTerm) ? 'block' : 'none';
                     });
                 });
 
             } catch (error) {
-                console.error('Error initializing games grid:', error);
-                gamesGrid.innerHTML = `
+                console.error('Error initializing game list:', error);
+                gameList.innerHTML = `
                     <div class="error">
-                        <p>Failed to load games. Please try again later.</p>
+                        <p>An error occurred while loading games.</p>
                         <button onclick="window.location.reload()" class="btn secondary">Retry</button>
                     </div>
                 `;
             }
         }
 
-        // Initialize when DOM is loaded
-        document.addEventListener('DOMContentLoaded', initializeGamesGrid);
+        // Initialize the game list when the page loads
+        initializeGameList();
     </script>
+
+    <style>
+        .game-layout {
+            display: flex;
+            gap: 20px;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            height: calc(100vh - 200px);
+        }
+
+        .game-sidebar {
+            width: 300px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .game-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .game-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 0;
+        }
+
+        .game-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .selected-game-container {
+            flex: 1;
+            background: white;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .game-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 40px 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+        }
+
+        .game-list {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .game-item {
+            padding: 12px 20px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .game-item h3 {
+            color: #000;
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .game-item .game-description {
+            color: #666;
+            margin: 4px 0 0;
+            font-size: 0.9rem;
+        }
+
+        .game-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .game-item.selected {
+            background-color: #e3f2fd;
+        }
+
+        .no-game-selected {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #666;
+            font-size: 18px;
+        }
+    </style>
 </body>
 </html> 
