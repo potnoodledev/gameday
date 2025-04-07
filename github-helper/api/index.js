@@ -40,7 +40,7 @@ app.get('/', (req, res) => {
 });
 
 // Get user's repositories
-app.get('/api/repos', async (req, res) => {
+app.get('/repos', async (req, res) => {
   try {
     console.log('Fetching repositories...');
     const { data } = await octokit.rest.repos.listForAuthenticatedUser({
@@ -56,7 +56,7 @@ app.get('/api/repos', async (req, res) => {
 });
 
 // Get repository branches with Vercel deployment URLs
-app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
+app.get('/repos/:owner/:repo/branches', async (req, res) => {
   try {
     const { owner, repo } = req.params;
     console.log(`Fetching branches for ${owner}/${repo}...`);
@@ -154,7 +154,7 @@ app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
 });
 
 // Create and push file to branch
-app.post('/api/repos/:owner/:repo/push', async (req, res) => {
+app.post('/repos/:owner/:repo/push', async (req, res) => {
   try {
     const { owner, repo } = req.params;
     const { branchName, content } = req.body;
@@ -203,7 +203,7 @@ app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
   console.log('Available routes:');
   console.log('GET /');
-  console.log('GET /api/repos');
-  console.log('GET /api/repos/:owner/:repo/branches');
-  console.log('POST /api/repos/:owner/:repo/push');
+  console.log('GET /repos');
+  console.log('GET /repos/:owner/:repo/branches');
+  console.log('POST /repos/:owner/:repo/push');
 }); 
