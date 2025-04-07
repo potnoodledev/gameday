@@ -98,7 +98,7 @@
         // Fetch repositories
         async function fetchRepositories() {
             try {
-                const response = await fetch('/api/repos');
+                const response = await fetch('/repos');
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.details || errorData.error || 'Failed to fetch repositories');
@@ -121,7 +121,7 @@
         async function fetchBranches(owner, repo) {
             try {
                 showLoading();
-                const response = await fetch(`/api/repos/${owner}/${repo}/branches`);
+                const response = await fetch(`/repos/${owner}/${repo}/branches`);
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.details || errorData.error || 'Failed to fetch branches');
@@ -174,7 +174,7 @@
                     throw new Error('Please fill in all fields');
                 }
 
-                const response = await fetch(`/api/repos/${currentOwner}/${currentRepo}/push`, {
+                const response = await fetch(`/repos/${currentOwner}/${currentRepo}/push`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
