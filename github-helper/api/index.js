@@ -185,6 +185,8 @@ app.get('/forks/:owner/:repo', async (req, res) => {
       pages_url: "https://" + fork.owner.login + ".github.io/" + fork.name
     }));
 
+    console.log('simplifiedForks:', simplifiedForks);
+
     res.json(simplifiedForks);
   } catch (error) {
     console.error('Error fetching forks:', error);

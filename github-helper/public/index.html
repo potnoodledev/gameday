@@ -14,17 +14,49 @@
 </head>
 <body class="bg-gray-50">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-8">GitHub Repository Branches</h1>
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">GitHub Repository Forks</h1>
         
-        <!-- Repository Selection -->
-        <div class="mb-8">
-            <label for="repo-select" class="block text-sm font-medium text-gray-700 mb-2">Select Repository</label>
+        <!-- Repository Input -->
+        <div class="mb-6 bg-white shadow rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Select Base Repository</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="owner-input" class="block text-sm font-medium text-gray-700">Owner</label>
+                    <input type="text" id="owner-input" value="potnoodledev" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="repo-input" class="block text-sm font-medium text-gray-700">Repository Name</label>
+                    <input type="text" id="repo-input" value="gameday-games" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="md:pt-6">
+                     <button id="fetch-forks-button" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">Fetch Forks</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fork Selection (Initially Hidden) -->
+        <div id="fork-selection-area" class="hidden mb-8">
+            <label for="repo-select" class="block text-sm font-medium text-gray-700 mb-2">Select Fork</label>
             <select id="repo-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                <option value="">Loading repositories...</option>
+                <option value="">Select a fork</option>
             </select>
         </div>
 
-        <!-- Create Branch Form -->
+        <!-- Fork Details Display (Initially Hidden) -->
+        <div id="fork-details" class="hidden mb-8 bg-white shadow rounded-lg p-6">
+            <!-- Fork details will be inserted here -->
+        </div>
+
+        <!-- GitHub Pages Iframe Container (Initially Hidden) -->
+        <div id="gh-pages-container" class="hidden mb-8">
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">GitHub Pages Preview</h3>
+            <div id="iframe-wrapper" class="bg-white shadow rounded-lg overflow-hidden">
+                 <iframe id="gh-pages-iframe" class="w-full h-[600px] border-0" title="GitHub Pages Preview"></iframe>
+                 <div id="no-pages-message" class="hidden p-6 text-center text-gray-500">GitHub Pages site not found or not deployed for this fork.</div>
+            </div>
+        </div>
+
+        <!-- Create Branch Form (Now Hidden by Default/Logic) -->
         <div id="create-branch-form" class="hidden mb-8">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Create New Branch</h2>
             <div class="bg-white shadow rounded-lg p-6">
@@ -91,29 +123,70 @@
         const branchNameInput = document.getElementById('branch-name');
         const fileContentInput = document.getElementById('file-content');
         const pushButton = document.getElementById('push-button');
+        const forkDetailsContainer = document.getElementById('fork-details');
+        const fetchForksButton = document.getElementById('fetch-forks-button');
+        const ownerInput = document.getElementById('owner-input');
+        const repoInput = document.getElementById('repo-input');
+        const forkSelectionArea = document.getElementById('fork-selection-area');
+        const ghPagesContainer = document.getElementById('gh-pages-container');
+        const ghPagesIframe = document.getElementById('gh-pages-iframe');
+        const noPagesMessage = document.getElementById('no-pages-message');
 
         let currentOwner = '';
         let currentRepo = '';
+        let forksData = {};
 
-        // Fetch repositories
+        // Fetch repositories (now uses input fields)
         async function fetchRepositories() {
+            const owner = ownerInput.value.trim();
+            const repo = repoInput.value.trim();
+
+            if (!owner || !repo) {
+                showError('Please enter both owner and repository name.');
+                return;
+            }
+
             try {
-                const response = await fetch('/repos');
+                showLoading(); // Show loading indicator
+                forkSelectionArea.classList.add('hidden'); // Hide elements during fetch
+                forkDetailsContainer.classList.add('hidden');
+                createBranchForm.classList.add('hidden');
+                branchesContainer.classList.add('hidden');
+
+                const response = await fetch(`/forks/${owner}/${repo}`);
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.details || errorData.error || 'Failed to fetch repositories');
+                    throw new Error(errorData.details || errorData.error || 'Failed to fetch forks');
                 }
-                const repos = await response.json();
+                const forks = await response.json();
                 
-                repoSelect.innerHTML = '<option value="">Select a repository</option>';
-                repos.forEach(repo => {
-                    const option = document.createElement('option');
-                    option.value = `${repo.owner.login}/${repo.name}`;
-                    option.textContent = repo.name;
-                    repoSelect.appendChild(option);
+                forksData = {}; 
+                repoSelect.innerHTML = '<option value="">Select a fork</option>';
+                forks.forEach(fork => {
+                    if (fork && fork.full_name && fork.html_url) { 
+                        const option = document.createElement('option');
+                        const forkIdentifier = fork.full_name;
+                        option.value = forkIdentifier;
+                        option.textContent = forkIdentifier;
+                        repoSelect.appendChild(option);
+                        forksData[forkIdentifier] = fork; 
+                    } else {
+                        console.warn('Skipping fork due to missing essential data (full_name or html_url):', fork);
+                    }
                 });
+
+                if (forks.length === 0) {
+                    showError(`No forks found for ${owner}/${repo}.`);
+                    hideLoading();
+                } else {
+                    forkSelectionArea.classList.remove('hidden'); // Show dropdown only if forks found
+                    hideLoading(); // Hide loading
+                    error.classList.add('hidden'); // Hide any previous error
+                    success.classList.add('hidden'); // Hide any previous success message
+                }
+                
             } catch (err) {
-                showError(`Failed to load repositories: ${err.message}`);
+                showError(`Failed to load forks for ${owner}/${repo}: ${err.message}`);
             }
         }
 
@@ -203,19 +276,81 @@
 
         // Event Listeners
         repoSelect.addEventListener('change', (e) => {
+            forkDetailsContainer.innerHTML = ''; 
+            forkDetailsContainer.classList.add('hidden'); 
+            createBranchForm.classList.add('hidden');
+            branchesContainer.classList.add('hidden');
+            ghPagesContainer.classList.add('hidden');
+            ghPagesIframe.classList.add('hidden');
+            noPagesMessage.classList.add('hidden');
+
             if (e.target.value) {
                 const [owner, repo] = e.target.value.split('/');
                 currentOwner = owner;
                 currentRepo = repo;
-                createBranchForm.classList.remove('hidden');
-                fetchBranches(owner, repo);
-            } else {
-                createBranchForm.classList.add('hidden');
-                branchesContainer.classList.add('hidden');
+
+                const selectedForkData = forksData[e.target.value];
+
+                if (selectedForkData) {
+                    forkDetailsContainer.innerHTML = `
+                        <h3 class="text-lg font-semibold text-gray-800 mb-3">Fork Details</h3>
+                        <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                            <div class="sm:col-span-1 flex items-center">
+                                <img src="${selectedForkData.avatar_url}" alt="Owner Avatar" class="h-8 w-8 rounded-full mr-2">
+                                <div>
+                                     <dt class="text-sm font-medium text-gray-500">Full Name</dt>
+                                     <dd class="mt-1 text-sm text-gray-900">${selectedForkData.full_name}</dd>
+                                </div>
+                            </div>
+                            <div class="sm:col-span-1">
+                                <dt class="text-sm font-medium text-gray-500">Stars</dt>
+                                <dd class="mt-1 text-sm text-gray-900">${selectedForkData.stargazers_count !== undefined ? selectedForkData.stargazers_count : 'N/A'}</dd>
+                            </div>
+                             <div class="sm:col-span-2">
+                                <dt class="text-sm font-medium text-gray-500">URL</dt>
+                                <dd class="mt-1 text-sm text-gray-900"><a href="${selectedForkData.html_url}" target="_blank" class="text-blue-600 hover:underline">${selectedForkData.html_url}</a></dd>
+                            </div>
+                             <div class="sm:col-span-2">
+                                <dt class="text-sm font-medium text-gray-500">Last Updated</dt>
+                                <dd class="mt-1 text-sm text-gray-900">${selectedForkData.updated_at ? new Date(selectedForkData.updated_at).toLocaleString() : 'N/A'}</dd>
+                            </div>
+                             ${selectedForkData.pages_url ? `
+                             <div class="sm:col-span-2">
+                                <dt class="text-sm font-medium text-gray-500">GitHub Pages</dt>
+                                <dd class="mt-1 text-sm text-gray-900"><a href="${selectedForkData.pages_url}" target="_blank" class="text-blue-600 hover:underline">${selectedForkData.pages_url}</a></dd>
+                            </div>
+                            ` : ''}
+                        </dl>
+                    `;
+                    forkDetailsContainer.classList.remove('hidden');
+
+                    ghPagesContainer.classList.remove('hidden');
+                    if (selectedForkData.pages_url) {
+                        ghPagesIframe.src = selectedForkData.pages_url;
+                        ghPagesIframe.classList.remove('hidden');
+                        noPagesMessage.classList.add('hidden');
+                    } else {
+                        ghPagesIframe.classList.add('hidden');
+                        noPagesMessage.classList.remove('hidden');
+                    }
+
+                } else {
+                     console.error("Could not find data for selected fork:", e.target.value);
+                }
+
             }
         });
 
         pushButton.addEventListener('click', createBranchAndPush);
+
+        fetchForksButton.addEventListener('click', () => {
+            repoSelect.value = ''; 
+            forkDetailsContainer.classList.add('hidden');
+            createBranchForm.classList.add('hidden');
+            branchesContainer.classList.add('hidden');
+            ghPagesContainer.classList.add('hidden');
+            fetchRepositories(); 
+        });
 
         // Utility Functions
         function showLoading() {
@@ -242,8 +377,8 @@
             error.classList.add('hidden');
         }
 
-        // Initial load
-        fetchRepositories();
+        // Initial load (removed fetchRepositories() call)
+        // fetchRepositories(); 
     </script>
 </body>
 </html> 
