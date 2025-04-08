@@ -153,6 +153,45 @@ app.get('/repos/:owner/:repo/branches', async (req, res) => {
   }
 });
 
+// Get repository forks
+app.get('/forks/:owner/:repo', async (req, res) => {
+  try {
+    const { owner, repo } = req.params;
+    // Extract query parameters with defaults
+    const { sort = 'newest', per_page = 30, page = 1 } = req.query;
+
+    // Validate per_page (GitHub max is 100)
+    const validPerPage = Math.min(parseInt(per_page) || 30, 100);
+    const validPage = parseInt(page) || 1;
+
+    console.log(`Fetching forks for ${owner}/${repo} with params: sort=${sort}, per_page=${validPerPage}, page=${validPage}...`);
+    
+    const { data } = await octokit.rest.repos.listForks({
+      owner,
+      repo,
+      sort: sort, // Valid values: newest, oldest, stargazers
+      per_page: validPerPage,
+      page: validPage
+    });
+
+    console.log(`Found ${data.length} forks for this page`);
+    // Map the data to include only the desired fields
+    const simplifiedForks = data.map(fork => ({
+      full_name: fork.full_name,
+      avatar_url: fork.owner.avatar_url,
+      updated_at: fork.updated_at,
+      html_url: fork.html_url,
+      stargazers_count: fork.stargazers_count,
+      pages_url: "https://" + fork.owner.login + ".github.io/" + fork.name
+    }));
+
+    res.json(simplifiedForks);
+  } catch (error) {
+    console.error('Error fetching forks:', error);
+    res.status(500).json({ error: 'Failed to fetch forks', details: error.message });
+  }
+});
+
 // Create and push file to branch
 app.post('/repos/:owner/:repo/push', async (req, res) => {
   try {
@@ -206,4 +245,5 @@ app.listen(port, () => {
   console.log('GET /repos');
   console.log('GET /repos/:owner/:repo/branches');
   console.log('POST /repos/:owner/:repo/push');
+  console.log('GET /forks/:owner/:repo');
 }); 
