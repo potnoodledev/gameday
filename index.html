@@ -3,457 +3,307 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>#Vibejam by PotNoodleDev</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5181889143002963"
-    crossorigin="anonymous"></script>    
-</head>
-<body>
-    <div id="animation-background"></div>
-    
-    <header>
-        <h1><span class="hash">#</span>Vibejam</h1>
-        <p class="tagline">Create. Fork. Compete.</p>
-    </header>
-
-    <section class="hero">
-        <div class="hero-content">
-            <h2>The Vibe Coding Tournament</h2>
-            <p>Create one-shot prototypes, fork others' creations and vote for your favorite vibe-coded games!</p>
-            <div class="cta-buttons">
-                <a href="#" class="btn primary">Submit Your Prototype</a>
-                <a href="#" class="btn secondary">Explore Games</a>
-            </div>
-        </div>
-    </section>
-
-    <section class="how-it-works">
-        <h2>How It Works</h2>
-        <div class="steps">
-            <div class="step">
-                <div class="step-icon">1</div>
-                <h3>Create</h3>
-                <p>Use the VibeCoder to create your one-shot prototype</p>
-            </div>
-            <div class="step">
-                <div class="step-icon">2</div>
-                <h3>Fork</h3>
-                <p>Build upon others' work to create something even better</p>
-            </div>
-            <div class="step">
-                <div class="step-icon">3</div>
-                <h3>Compete</h3>
-                <p>The best prototypes enter our tournament bracket</p>
-            </div>
-        </div>
-    </section>
-
-    <section class="explore-games">
-        <h2>Explore Games</h2>
-        <div class="game-layout">
-            <div class="game-sidebar">
-                <div class="search-box">
-                    <input type="text" id="gameSearch" placeholder="Search games..." class="search-input">
-                    <div class="search-icon">🔍</div>
-                </div>
-                <div class="game-list" id="gameList">
-                    <div class="loading">Loading games...</div>
-                </div>
-            </div>
-            <div class="game-main">
-                <div class="game-header" id="gameHeader">
-                    <h3>Select a game to play</h3>
-                </div>
-                <div class="selected-game-container" id="selectedGameContainer">
-                    <div class="no-game-selected">
-                        <p>Select a game from the list to play</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="tournament">
-        <h2>The Tournament</h2>
-        <div class="bracket-preview">
-            <div class="bracket-container">
-                <!-- Simplified tournament bracket visualization -->
-                <div class="round round-1">
-                    <div class="match"></div>
-                    <div class="match"></div>
-                    <div class="match"></div>
-                    <div class="match"></div>
-                </div>
-                <div class="round round-2">
-                    <div class="match"></div>
-                    <div class="match"></div>
-                </div>
-                <div class="round round-3">
-                    <div class="match final"></div>
-                </div>
-            </div>
-        </div>
-        <p class="tournament-info">Everyone loves a tournament arc, so we're going to have one!</p>
-    </section>
-
-    <section class="featured">
-        <h2>Featured Game</h2>
-        <div class="featured-game">
-            <div class="game-container">
-                <iframe src="games/bee-colony-simulator/index.html" frameborder="0" allowfullscreen></iframe>
-            </div>
-            <div class="game-info">
-                <h3>Bee Colony Simulator</h3>
-                <p>Manage your bee colony, collect resources, and upgrade your hive in this engaging simulation game!</p>
-            </div>
-        </div>
-    </section>
-
-    <footer>
-        <div class="footer-content">
-            <div class="footer-logo">
-                <h2><span class="hash">#</span>Vibejam</h2>
-            </div>
-            <div class="footer-links">
-                <ul>
-                    <li><a href="#">About</a></li>
-                    <li><a href="#">Rules</a></li>
-                    <li><a href="#">FAQ</a></li>
-                    <li><a href="#">Contact</a></li>
-                </ul>
-            </div>
-        </div>
-        <div class="copyright">
-            <p>&copy; 2025 #PotNoodleDev $NOODS. All rights reserved.</p>
-        </div>
-    </footer>
-
-    <script src="animation.js"></script>
-    <script type="module">
-        // GitHub API configuration
-        const GITHUB_API = 'https://api.github.com';
-        const REPO_OWNER = 'urtimus-prime';
-        const REPO_NAME = '03-22-vibejam';
-        
-        // API to retrieve deployment urls, returns array of objects including name and deploymentUrl
-        const DEPLOYMENT_API = `https://gameday-ten.vercel.app/repos/${REPO_OWNER}/${REPO_NAME}/branches`;
-
-        // Fetch branches from GitHub with retry logic
-        async function fetchBranches(retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    // Fetch both branches and deployment URLs
-                    const [branchesResponse, deploymentsResponse] = await Promise.all([
-                        fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/branches`, {
-                            headers: {
-                                'Accept': 'application/vnd.github.v3+json',
-                                'User-Agent': 'Vibejam-Games-Explorer'
-                            }
-                        }),
-                        fetch(DEPLOYMENT_API)
-                    ]);
-                    
-                    if (branchesResponse.status === 403 || deploymentsResponse.status === 403) {
-                        // Rate limit hit, wait and retry
-                        const retryAfter = branchesResponse.headers.get('Retry-After') || 60;
-                        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                        continue;
-                    }
-                    
-                    if (!branchesResponse.ok) throw new Error(`HTTP error! status: ${branchesResponse.status}`);
-                    if (!deploymentsResponse.ok) throw new Error(`HTTP error! status: ${deploymentsResponse.status}`);
-                    
-                    const branches = await branchesResponse.json();
-                    const deployments = await deploymentsResponse.json();
-                    
-                    // Merge deployment URLs with branch data
-                    return branches.map(branch => ({
-                        ...branch,
-                        deploymentUrl: deployments.find(d => d.name === branch.name)?.deploymentUrl
-                    }));
-                } catch (error) {
-                    console.error(`Attempt ${i + 1} failed:`, error);
-                    if (i === retries - 1) throw error;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-                }
-            }
-            return [];
-        }
-
-        // Create game card HTML with loading state
-        function createGameCard(branch) {
-            const gameUrl = branch.deploymentUrl || `${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
-            const formattedName = branch.name
-                .replace(/-/g, ' ')
-                .replace(/\b\w/g, l => l.toUpperCase())
-                .replace(/\b\d+/g, '');
-            
-            // Safely get the last update date with fallback
-            const lastUpdate = branch.commit?.commit?.author?.date 
-                ? new Date(branch.commit.commit.author.date).toLocaleDateString()
-                : 'Unknown date';
-            
-            return `
-                <div class="game-card" data-branch="${branch.name}">
-                    <div class="game-preview">
-                        <div class="game-loading">
-                            <div class="spinner"></div>
-                            <p>Loading game...</p>
-                        </div>
-                        <iframe 
-                            src="https://${gameUrl}" 
-                            frameborder="0" 
-                            allowfullscreen
-                            onload="this.parentElement.querySelector('.game-loading').style.display='none'"
-                            onerror="this.parentElement.querySelector('.game-loading').innerHTML='<p>Failed to load game</p>'"
-                        ></iframe>
-                    </div>
-                    <div class="game-info">
-                        <h3>${formattedName}</h3>
-                        <div class="game-status"></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Create game list item HTML
-        function createGameListItem(branch) {
-            const formattedName = branch.name
-                .replace(/-/g, ' ')
-                .replace(/\b\w/g, l => l.toUpperCase())
-                .replace(/\b\d+/g, '');
-            
-            return `
-                <div class="game-item" data-branch="${branch.name}">
-                    <h3>${formattedName}</h3>
-                    <p class="game-description">Click to play</p>
-                </div>
-            `;
-        }
-
-        // Initialize game list with search functionality
-        async function initializeGameList() {
-            const gameList = document.getElementById('gameList');
-            const selectedGameContainer = document.getElementById('selectedGameContainer');
-            const searchInput = document.getElementById('gameSearch');
-            
-            gameList.innerHTML = '<div class="loading">Loading games...</div>';
-            
-            try {
-                const branches = await fetchBranches();
-                
-                if (branches.length === 0) {
-                    gameList.innerHTML = `
-                        <div class="error">
-                            <p>Failed to load games. Please try again later.</p>
-                            <button onclick="window.location.reload()" class="btn secondary">Retry</button>
-                        </div>
-                    `;
-                    return;
-                }
-
-                const gameBranches = branches.filter(branch => 
-                    branch.name !== 'main' && 
-                    branch.name !== 'master' &&
-                    !branch.name.startsWith('gh-pages')
-                );
-
-                if (gameBranches.length === 0) {
-                    gameList.innerHTML = `
-                        <div class="error">
-                            <p>No games found. Be the first to submit a game!</p>
-                            <a href="#" class="btn primary">Submit Your Game</a>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Create and display game list
-                const gamesHTML = gameBranches.map(branch => createGameListItem(branch)).join('');
-                gameList.innerHTML = gamesHTML;
-
-                // Add click handlers to game items
-                const gameItems = gameList.querySelectorAll('.game-item');
-                gameItems.forEach(item => {
-                    item.addEventListener('click', () => {
-                        const branch = gameBranches.find(b => b.name === item.dataset.branch);
-                        if (branch) {
-                            // Update selected state
-                            gameItems.forEach(i => i.classList.remove('selected'));
-                            item.classList.add('selected');
-
-                            // Update game header with game name
-                            const gameHeader = document.getElementById('gameHeader');
-                            const formattedName = branch.name
-                                .replace(/-/g, ' ')
-                                .replace(/\b\w/g, l => l.toUpperCase())
-                                .replace(/\b\d+/g, '');
-                            gameHeader.innerHTML = `<h3>${formattedName}</h3>`;
-
-                            // Display selected game
-                            const gameUrl = branch.deploymentUrl || `${REPO_OWNER}.github.io/${REPO_NAME}/${branch.name}/index.html`;
-                            selectedGameContainer.innerHTML = `
-                                <iframe 
-                                    src="https://${gameUrl}" 
-                                    class="game-frame"
-                                    frameborder="0" 
-                                    allowfullscreen
-                                ></iframe>
-                            `;
-                        }
-                    });
-                });
-
-                // Add search functionality
-                searchInput.addEventListener('input', (e) => {
-                    const searchTerm = e.target.value.toLowerCase();
-                    gameItems.forEach(item => {
-                        const gameName = item.querySelector('h3').textContent.toLowerCase();
-                        item.style.display = gameName.includes(searchTerm) ? 'block' : 'none';
-                    });
-                });
-
-            } catch (error) {
-                console.error('Error initializing game list:', error);
-                gameList.innerHTML = `
-                    <div class="error">
-                        <p>An error occurred while loading games.</p>
-                        <button onclick="window.location.reload()" class="btn secondary">Retry</button>
-                    </div>
-                `;
-            }
-        }
-
-        // Initialize the game list when the page loads
-        initializeGameList();
-    </script>
-
+    <title>Vibe Game A Day</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
-        .game-layout {
-            display: flex;
-            gap: 20px;
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 20px;
-            height: calc(100vh - 200px);
-        }
-
-        .game-sidebar {
-            width: 300px;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .game-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .game-header {
-            background: #f8f9fa;
-            padding: 15px 20px;
-            border-radius: 8px 8px 0 0;
-            border-bottom: 1px solid #dee2e6;
-            margin-bottom: 0;
-        }
-
-        .game-header h3 {
+        html, body {
+            height: 100vh;
+            width: 100vw;
             margin: 0;
-            color: #333;
-            font-size: 1.2rem;
-        }
-
-        .selected-game-container {
-            flex: 1;
-            background: white;
-            border-radius: 0 0 8px 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 0;
             overflow: hidden;
         }
-
-        .game-frame {
+        body {
+            background: #181a1b;
+            color: #fff;
+            font-family: 'Share Tech Mono', monospace;
+            box-sizing: border-box;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+            min-height: 100vh;
+            margin: 0;
+            box-sizing: border-box;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            width: 100vw;
+            max-width: 100vw;
+            min-height: 0;
+        }
+        .game-header {
+            font-size: 1.15em;
+            margin-bottom: 6px;
+            margin-top: 20px;
+            letter-spacing: 1.2px;
+            margin-top: 0;
+        }
+        .game-timer {
+            font-size: 1em;
+            color: #b5e3ff;
+            margin-bottom: 10px;
+            margin-top: 0;
+        }
+        .game-area {
+            background: #111315;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px #0007;
+            width: 90vw;
+            max-width: 1100px;
+            /* height will be set dynamically */
+            min-height: 120px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: height 0.3s;
+        }
+        .bee-game-frame {
             width: 100%;
             height: 100%;
             border: none;
+            border-radius: 14px;
+            background: #111315;
+            display: block;
         }
-
-        .search-box {
-            position: relative;
+        .header, .bottom-bar {
+            width: 100vw;
+            left: 0;
+            box-sizing: border-box;
         }
-
-        .search-input {
-            width: 100%;
-            padding: 12px 40px 12px 20px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
+        .header {
+            position: fixed;
+            top: 0;
+            z-index: 1000;
         }
-
-        .search-input:focus {
-            outline: none;
-            border-color: #4CAF50;
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            z-index: 1000;
         }
-
-        .search-icon {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #666;
-        }
-
-        .game-list {
+        .bottom-section {
             flex: 1;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: white;
-        }
-
-        .game-item {
-            padding: 12px 20px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .game-item h3 {
-            color: #000;
-            margin: 0;
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
-
-        .game-item .game-description {
-            color: #666;
-            margin: 4px 0 0;
-            font-size: 0.9rem;
-        }
-
-        .game-item:hover {
-            background-color: #f5f5f5;
-        }
-
-        .game-item.selected {
-            background-color: #e3f2fd;
-        }
-
-        .no-game-selected {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .bottom-center {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
             align-items: center;
+        }
+        .bottom-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        .game-fund-bar {
+            background: #23272a;
+            border-radius: 8px;
+            height: 16px;
+            width: 260px;
+            margin: 5px 0 10px 0;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+        .creator-bar {
+            background: #b5e3ff;
             height: 100%;
-            color: #666;
-            font-size: 18px;
+            width: 60%;
+        }
+        .player-bar {
+            background: #ffe082;
+            height: 100%;
+            width: 40%;
+        }
+        .bottom-bar a {
+            color: #b5e3ff;
+            text-decoration: underline;
+        }
+        .bottom-bar a:hover {
+            color: #fff;
+        }
+        .hidden-header-footer {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.5s cubic-bezier(.4,1.6,.4,1), height 0.3s;
+            height: 0 !important;
+            overflow: hidden !important;
+        }
+        /* Slide header from top */
+        .header {
+            transition: opacity 0.3s, transform 0.5s cubic-bezier(.4,1.6,.4,1), height 0.3s;
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        .header.visible-header-footer {
+            transform: translateY(0);
+            opacity: 1;
+            height: auto !important;
+        }
+        /* Slide footer from bottom */
+        .bottom-bar {
+            transition: opacity 0.3s, transform 0.5s cubic-bezier(.4,1.6,.4,1), height 0.3s;
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        .bottom-bar.visible-header-footer {
+            transform: translateY(0);
+            opacity: 1;
+            height: auto !important;
+        }
+        .floating-btn {
+            position: fixed;
+            bottom: 80px;
+            right: 28px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #b5e3ff;
+            color: #181a1b;
+            font-size: 2em;
+            border: none;
+            box-shadow: 0 2px 8px #0007;
+            cursor: pointer;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, color 0.2s;
+        }
+        .floating-btn:hover {
+            background: #ffe082;
+            color: #111315;
+        }
+        @media (max-width: 900px) {
+            .main-content {
+                min-height: 50vh;
+            }
+            .game-area {
+                width: 98vw;
+                min-height: 120px;
+            }
+            .bee-game-frame {
+                width: 100vw;
+                min-height: 120px;
+            }
+            .bottom-bar {
+                flex-direction: column;
+                align-items: center;
+                padding: 12px;
+            }
+            .bottom-section, .bottom-center, .bottom-right {
+                align-items: center;
+            }
+        }
+        @media (max-width: 600px) {
+            .main-content {
+                min-height: 40vh;
+            }
+            .game-area {
+                width: 100vw;
+                min-height: 80px;
+            }
+            .bee-game-frame {
+                width: 100vw;
+                min-height: 80px;
+            }
         }
     </style>
+</head>
+<body>
+    <div class="header hidden-header-footer" id="mainHeader">
+        <div class="logo">VIBE GAME A DAY</div>
+        <div class="nav">
+            <a href="#">SEE PREVIOUS</a>
+            <a href="#">HOW IT WORKS</a>
+            <button class="submit-btn">SUBMIT YOUR GAME</button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="main-content" style="width:100%;max-width:100vw;">
+            <div class="game-header">BEE COLONY SIMULATOR</div>
+            <div class="game-timer">09.03.25 — 11:04:02<br><span style="font-size:0.85em;color:#888;">Next Game In: 03:19:23</span></div>
+            <div class="game-area">
+                <iframe src="games/bee-colony-simulator/index.html" class="bee-game-frame" allowfullscreen title="Bee Colony Simulator"></iframe>
+            </div>
+        </div>
+    </div>
+    <div class="bottom-bar hidden-header-footer" id="mainFooter">
+        <div class="bottom-section">
+            <div style="font-size:0.9em;color:#888;">ALL Advertising Fees, Buy Back &amp; Burn $NOODS</div>
+            <div>TODAY'S VIBE GAME: <a href="#">POTNOODLEDEV</a></div>
+        </div>
+        <div class="bottom-center">
+            <div>TODAY'S GAME FUND <b>800,000 $NOODS</b></div>
+            <div class="game-fund-bar">
+                <div class="creator-bar"></div>
+                <div class="player-bar"></div>
+            </div>
+            <div style="font-size:0.95em;">Creator: 60% <span style="color:#b5e3ff;">480,000 $NOODS</span> &nbsp;&nbsp; Players: 40% <span style="color:#ffe082;">320,000 $NOODS</span></div>
+        </div>
+        <div class="bottom-right">
+            <div>TOMORROW'S GAME FUND<br><b>1,200,000 $NOODS</b></div>
+            <div style="margin-top:10px; color:#ffe082;">$NOODS</div>
+            <div style="font-size:0.75em;color:#888;">CA: 0x24e8af...0dd90d</div>
+        </div>
+    </div>
+    <button id="toggleHeaderFooterBtn" class="floating-btn" title="Show/Hide Info">☰</button>
+    <script>
+      const btn = document.getElementById('toggleHeaderFooterBtn');
+      const header = document.getElementById('mainHeader');
+      const footer = document.getElementById('mainFooter');
+      const gameArea = document.querySelector('.game-area');
+      const HEADER_HEIGHT = 60; // px, adjust if needed
+      const FOOTER_HEIGHT = 90; // px, adjust if needed
+      let visible = false;
+      function adjustGameAreaHeight() {
+        // Get viewport height
+        const vh = window.innerHeight;
+        let headerH = 0, footerH = 0;
+        if (header.classList.contains('visible-header-footer')) {
+          headerH = header.offsetHeight || HEADER_HEIGHT;
+        }
+        if (footer.classList.contains('visible-header-footer')) {
+          footerH = footer.offsetHeight || FOOTER_HEIGHT;
+        }
+        // 16px margin buffer for .game-area
+        const newHeight = vh - headerH - footerH - 16;
+        gameArea.style.height = `${Math.max(newHeight, 120)}px`;
+      }
+      function setHeaderFooterVisibility(show) {
+        if (show) {
+          header.classList.remove('hidden-header-footer');
+          footer.classList.remove('hidden-header-footer');
+          header.classList.add('visible-header-footer');
+          footer.classList.add('visible-header-footer');
+        } else {
+          header.classList.remove('visible-header-footer');
+          footer.classList.remove('visible-header-footer');
+          header.classList.add('hidden-header-footer');
+          footer.classList.add('hidden-header-footer');
+        }
+        setTimeout(adjustGameAreaHeight, 510); // after slide animation
+      }
+      btn.addEventListener('click', function() {
+        visible = !visible;
+        setHeaderFooterVisibility(visible);
+      });
+      window.addEventListener('resize', adjustGameAreaHeight);
+      // Hide on load
+      setHeaderFooterVisibility(false);
+      window.onload = adjustGameAreaHeight;
+    </script>
 </body>
-</html> 
+</html>
