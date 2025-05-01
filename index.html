@@ -145,17 +145,29 @@
       }
       let currentGame = null;
       let onlineUsers = {};
-      let lastLeaderboardData = [];
+      let playerEmojis = {};
+      let playerPositions = {};
       socket.on('leaderboard', (data) => {
         onlineUsers = {};
         data.forEach(entry => { onlineUsers[entry.name] = true; });
-        lastLeaderboardData = data;
         updateLeaderboard(data);
       });
       socket.on('onlineStatus', (status) => {
         onlineUsers = status;
         updateLeaderboard(lastLeaderboardData);
       });
+      window.addEventListener('message', (event) => {
+        if (typeof event.data === 'object' && event.data.type === 'scoreUpdate') {
+          if (event.data.name && event.data.emoji) {
+            playerEmojis[event.data.name] = event.data.emoji;
+            if (typeof event.data.pos === 'number') playerPositions[event.data.name] = event.data.pos;
+          } else if (event.data.emoji) {
+            playerEmojis[playerName] = event.data.emoji;
+            if (typeof event.data.pos === 'number') playerPositions[playerName] = event.data.pos;
+          }
+        }
+      });
+      let lastLeaderboardData = [];
       function updateLeaderboard(data) {
         lastLeaderboardData = data;
         leaderboardList.innerHTML = '';
@@ -163,7 +175,11 @@
           const li = document.createElement('li');
           li.className = 'flex justify-between items-center px-2 py-1 rounded gap-2';
           let statusDot = `<span class='inline-block w-3 h-3 rounded-full mr-2' style='background:${onlineUsers[entry.name] ? '#22c55e' : '#888'}'></span>`;
-          let nameSpan = `<span class='flex items-center'>${statusDot}${entry.name}</span>`;
+          let emoji = playerEmojis[entry.name] || '';
+          let emojiSpan = emoji ? `<span style="font-family:Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,EmojiOne,sans-serif;font-size:1.3em;">${emoji}</span>` : '';
+          let pos = (typeof playerPositions[entry.name] === 'number' && !isNaN(playerPositions[entry.name])) ? playerPositions[entry.name] : ((typeof entry.pos === 'number' && !isNaN(entry.pos)) ? entry.pos : 0);
+          let posText = `<span class='ml-1 text-xs text-gray-400'>(pos: ${pos})</span>`;
+          let nameSpan = `<span class='flex items-center gap-1'>${statusDot}${emojiSpan}${entry.name}${posText}</span>`;
           if (entry.name === playerName) {
             li.className += ' bg-[#b5e3ff] text-[#181a1b] font-bold';
           } else {
