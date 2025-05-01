@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dice Race</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Fredoka', sans-serif; background: #f8fafc; }
+    .board-cell { transition: background 0.2s, box-shadow 0.2s; }
+    .piece { transition: transform 0.3s cubic-bezier(.4,1.6,.4,1); }
+    .dice-anim { animation: roll 0.5s cubic-bezier(.4,1.6,.4,1); }
+    @keyframes roll { 0% { transform: scale(1.2) rotate(0deg); } 80% { transform: scale(0.9) rotate(360deg); } 100% { transform: scale(1) rotate(0deg); } }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 to-yellow-100">
+  <div class="w-full max-w-md mx-auto mt-6 p-4 bg-white rounded-2xl shadow-2xl flex flex-col items-center">
+    <div class="text-2xl font-bold mb-2 tracking-wide text-blue-700">Dice Race</div>
+    <div class="mb-4 text-gray-600 text-center">Roll the dice and race around the board! Steps = Score.</div>
+    <div id="board" class="relative grid grid-cols-6 grid-rows-4 gap-1 w-full aspect-[3/2] mb-6">
+      <!-- Board cells and pieces will be rendered here -->
+    </div>
+    <div class="flex items-center gap-4 mb-2">
+      <button id="rollBtn" class="px-6 py-3 rounded-lg bg-blue-500 text-white font-bold text-lg shadow hover:bg-blue-700 transition">ROLL DICE</button>
+      <div id="dice" class="w-14 h-14 flex items-center justify-center text-3xl font-bold bg-yellow-200 rounded-lg shadow border-2 border-yellow-400">🎲</div>
+    </div>
+    <div class="w-full flex flex-col items-center mt-2">
+      <div class="text-gray-700 font-semibold">Your Steps: <span id="mySteps">0</span></div>
+      <div class="text-gray-500 text-sm">Player: <span id="myName">...</span></div>
+    </div>
+  </div>
+  <script type="module">
+    import { io } from 'https://cdn.socket.io/4.7.5/socket.io.esm.min.js';
+    // --- Board Setup ---
+    const COLS = 6, ROWS = 4;
+    const TOTAL_CELLS = COLS * 2 + (ROWS-2) * 2;
+    const board = document.getElementById('board');
+    // Generate board path (monopoly style, clockwise)
+    function getBoardPath() {
+      const path = [];
+      // Top row left to right
+      for (let c = 0; c < COLS; c++) path.push([0, c]);
+      // Right col top to bottom (skip first)
+      for (let r = 1; r < ROWS; r++) path.push([r, COLS-1]);
+      // Bottom row right to left (skip last)
+      for (let c = COLS-2; c >= 0; c--) path.push([ROWS-1, c]);
+      // Left col bottom to top (skip first/last)
+      for (let r = ROWS-2; r > 0; r--) path.push([r, 0]);
+      return path;
+    }
+    const boardPath = getBoardPath();
+    // --- Player State ---
+    let playerName = '...';
+    let mySteps = 0;
+    let myPos = 0;
+    let allPlayers = {}; // { name: { pos, steps, color } }
+    let myColor = '';
+    // --- Colors for pieces ---
+    const COLORS = ['#2563eb','#f59e42','#10b981','#e11d48','#a21caf','#fbbf24','#0ea5e9','#f43f5e'];
+    // --- Socket.io ---
+    const socket = io();
+    // --- UI Elements ---
+    const rollBtn = document.getElementById('rollBtn');
+    const diceDiv = document.getElementById('dice');
+    const myStepsSpan = document.getElementById('mySteps');
+    const myNameSpan = document.getElementById('myName');
+    // --- Board Rendering ---
+    function renderBoard() {
+      board.innerHTML = '';
+      // Render cells
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const idx = boardPath.findIndex(([rr,cc])=>rr===r&&cc===c);
+          const isPath = idx !== -1;
+          const cell = document.createElement('div');
+          cell.className = 'board-cell w-full h-full aspect-square flex items-center justify-center rounded-lg ' + (isPath ? 'bg-blue-100 border-2 border-blue-300' : 'bg-gray-100');
+          cell.style.position = 'relative';
+          cell.dataset.idx = idx;
+          board.appendChild(cell);
+        }
+      }
+      // Render pieces
+      Object.entries(allPlayers).forEach(([name, { pos, color }]) => {
+        const [r, c] = boardPath[pos % boardPath.length];
+        const cellIdx = r * COLS + c;
+        const cell = board.children[cellIdx];
+        if (cell) {
+          const piece = document.createElement('div');
+          piece.className = 'piece absolute w-8 h-8 rounded-full flex items-center justify-center text-white font-bold shadow-lg';
+          piece.style.background = color;
+          piece.style.transform = 'translate(-50%,-50%)';
+          piece.style.left = '50%';
+          piece.style.top = '50%';
+          piece.textContent = name[0].toUpperCase();
+          piece.title = name;
+          cell.appendChild(piece);
+        }
+      });
+    }
+    // --- Dice Rolling ---
+    function rollDice() {
+      const roll = Math.floor(Math.random()*6)+1;
+      diceDiv.textContent = roll;
+      diceDiv.classList.add('dice-anim');
+      setTimeout(()=>diceDiv.classList.remove('dice-anim'), 500);
+      // Move piece
+      myPos = (myPos + roll) % boardPath.length;
+      mySteps += roll;
+      myStepsSpan.textContent = mySteps;
+      // Send score update to parent
+      window.parent.postMessage({ type: 'scoreUpdate', score: mySteps }, '*');
+      // Broadcast move to others
+      socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor });
+      renderBoard();
+    }
+    rollBtn.onclick = () => {
+      rollBtn.disabled = true;
+      rollDice();
+      setTimeout(()=>{ rollBtn.disabled = false; }, 700);
+    };
+    // --- Multiplayer Sync ---
+    socket.on('move', ({ name, pos, steps, color }) => {
+      if (!allPlayers[name]) allPlayers[name] = { pos: 0, steps: 0, color };
+      allPlayers[name].pos = pos;
+      allPlayers[name].steps = steps;
+      allPlayers[name].color = color;
+      renderBoard();
+    });
+    // --- Player Name from Parent ---
+    window.addEventListener('message', (event) => {
+      if (typeof event.data === 'object' && event.data.type === 'playerName') {
+        playerName = event.data.name;
+        myNameSpan.textContent = playerName;
+        // Assign color based on name hash
+        let hash = 0; for (let i=0;i<playerName.length;i++) hash += playerName.charCodeAt(i);
+        myColor = COLORS[hash % COLORS.length];
+        // Announce join
+        socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor });
+      }
+    });
+    // --- On load, request player name from parent ---
+    window.parent.postMessage({ type: 'requestPlayerName' }, '*');
+    // --- On connect, re-announce self ---
+    socket.on('connect', () => {
+      if (playerName !== '...') {
+        socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor });
+      }
+    });
+    // --- Listen for all moves to update leaderboard ---
+    socket.on('move', ({ name, steps }) => {
+      // Send leaderboard update to parent
+      if (name && typeof steps === 'number') {
+        window.parent.postMessage({ type: 'scoreUpdate', score: steps, name }, '*');
+      }
+    });
+    // --- Initial render ---
+    renderBoard();
+  </script>
+</body>
+</html> 

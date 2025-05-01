@@ -5,10 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GitHub Repository Branches</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network@9.1.2/dist/vis-network.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
+        }
+        #fork-graph {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            margin-bottom: 2rem;
+            border-radius: 0.5rem;
         }
     </style>
 </head>
@@ -16,6 +25,8 @@
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-8">GitHub Repository Forks</h1>
         
+        <!-- Fork Graph Visualization -->
+        <div id="fork-graph" class="hidden"></div>
         <!-- Repository Input -->
         <div class="mb-6 bg-white shadow rounded-lg p-6">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Select Base Repository</h2>
@@ -34,7 +45,7 @@
             </div>
         </div>
 
-        <!-- Fork Selection (Initially Hidden) -->
+        <!-- Fork Selection (Fallback Dropdown, hidden if graph is shown) -->
         <div id="fork-selection-area" class="hidden mb-8">
             <label for="repo-select" class="block text-sm font-medium text-gray-700 mb-2">Select Fork</label>
             <select id="repo-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
@@ -111,7 +122,14 @@
     </div>
 
     <script type="module">
+        // Declare all DOM elements ONCE at the top
         const repoSelect = document.getElementById('repo-select');
+        const forkGraph = document.getElementById('fork-graph');
+        const forkSelectionArea = document.getElementById('fork-selection-area');
+        const ghPagesContainer = document.getElementById('gh-pages-container');
+        const iframe = document.getElementById('gh-pages-iframe');
+        const noPagesMessage = document.getElementById('no-pages-message');
+        const forkDetailsContainer = document.getElementById('fork-details');
         const createBranchForm = document.getElementById('create-branch-form');
         const branchesContainer = document.getElementById('branches-container');
         const branchesList = document.getElementById('branches-list');
@@ -119,18 +137,16 @@
         const error = document.getElementById('error');
         const errorMessage = document.getElementById('error-message');
         const success = document.getElementById('success');
+
+        // Remove any duplicate declarations of these variables below this point!
         const successMessage = document.getElementById('success-message');
         const branchNameInput = document.getElementById('branch-name');
         const fileContentInput = document.getElementById('file-content');
         const pushButton = document.getElementById('push-button');
-        const forkDetailsContainer = document.getElementById('fork-details');
         const fetchForksButton = document.getElementById('fetch-forks-button');
         const ownerInput = document.getElementById('owner-input');
         const repoInput = document.getElementById('repo-input');
-        const forkSelectionArea = document.getElementById('fork-selection-area');
-        const ghPagesContainer = document.getElementById('gh-pages-container');
-        const ghPagesIframe = document.getElementById('gh-pages-iframe');
-        const noPagesMessage = document.getElementById('no-pages-message');
+        // All DOM elements are declared once at the top above.
 
         let currentOwner = '';
         let currentRepo = '';
@@ -179,7 +195,7 @@
                     showError(`No forks found for ${owner}/${repo}.`);
                     hideLoading();
                 } else {
-                    forkSelectionArea.classList.remove('hidden'); // Show dropdown only if forks found
+                    renderForkGraph(forks, owner, repo);
                     hideLoading(); // Hide loading
                     error.classList.add('hidden'); // Hide any previous error
                     success.classList.add('hidden'); // Hide any previous success message
@@ -377,8 +393,111 @@
             error.classList.add('hidden');
         }
 
-        // Initial load (removed fetchRepositories() call)
-        // fetchRepositories(); 
+        // Fork Graph Rendering Function
+        function renderForkGraph(forks, baseOwner, baseRepo) {
+            if (!forks || forks.length === 0) {
+                forkGraph.classList.add('hidden');
+                forkSelectionArea.classList.remove('hidden');
+                return;
+            }
+            // Build nodes and edges for vis-network
+            const nodes = [];
+            const edges = [];
+            const baseId = `${baseOwner}/${baseRepo}`;
+            // Central base repo node, fixed position
+            nodes.push({
+                id: baseId,
+                label: baseId,
+                color: '#2563eb',
+                shape: 'box',
+                font: { color: '#fff', size: 16 },
+                x: 0,
+                y: 0,
+                fixed: {x: true, y: true},
+                physics: false,
+            });
+            // Arrange forks in a circle
+            const radius = 180;
+            const angleStep = (2 * Math.PI) / forks.length;
+            forks.forEach((fork, i) => {
+                const angle = i * angleStep;
+                const x = Math.round(Math.cos(angle) * radius);
+                const y = Math.round(Math.sin(angle) * radius);
+                nodes.push({
+                    id: fork.full_name,
+                    label: fork.full_name,
+                    shape: fork.avatar_url ? 'circularImage' : 'box',
+                    image: fork.avatar_url || undefined,
+                    color: fork.avatar_url ? undefined : '#f59e42',
+                    font: { color: '#111', size: 14 },
+                    title: `<b>${fork.full_name}</b><br>Last updated: ${new Date(fork.updated_at).toLocaleString()}<br>Stargazers: ${fork.stargazers_count}`,
+                    x,
+                    y,
+                    physics: false,
+                });
+                edges.push({ from: baseId, to: fork.full_name, arrows: 'to', color: { color: '#888' } });
+            });
+            // Render the network
+            forkGraph.classList.remove('hidden');
+            forkGraph.innerHTML = '';
+            const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+            const options = {
+                layout: { improvedLayout: false }, // disable auto layout
+                interaction: { hover: true },
+                nodes: {
+                    borderWidth: 2,
+                    shadow: true,
+                    shapeProperties: { useImageSize: true, interpolation: false },
+                },
+                edges: { smooth: true, shadow: false },
+                physics: false,
+                height: '400px',
+                width: '100%',
+            };
+            const network = new vis.Network(forkGraph, data, options);
+            // Fork selection on click
+            network.on('selectNode', function(params) {
+                const nodeId = params.nodes[0];
+                if (nodeId === baseId) return; // skip base repo
+                // Find fork object
+                const fork = forks.find(f => f.full_name === nodeId);
+                if (fork) {
+                    // Show fork details and preview
+                    showForkDetailsAndPreview(fork);
+                }
+            });
+            // Hide fallback dropdown
+            forkSelectionArea.classList.add('hidden');
+        }
+
+        function showForkDetailsAndPreview(fork) {
+            // Show fork details
+            forkDetailsContainer.innerHTML = `
+                <div class="flex items-center space-x-4 mb-4">
+                    <img src="${fork.avatar_url}" alt="${fork.full_name}" class="w-12 h-12 rounded-full border" />
+                    <div>
+                        <div class="font-semibold text-lg text-gray-900">${fork.full_name}</div>
+                        <div class="text-gray-500 text-sm">Last updated: ${new Date(fork.updated_at).toLocaleString()}</div>
+                        <div class="text-gray-500 text-sm">Stargazers: ${fork.stargazers_count}</div>
+                        <a href="${fork.html_url}" target="_blank" class="text-blue-600 hover:underline text-sm">View on GitHub</a>
+                    </div>
+                </div>
+            `;
+            forkDetailsContainer.classList.remove('hidden');
+            // Show preview
+            if (fork.pages_url) {
+                iframe.src = fork.pages_url;
+                ghPagesContainer.classList.remove('hidden');
+                noPagesMessage.classList.add('hidden');
+            } else {
+                iframe.src = '';
+                ghPagesContainer.classList.remove('hidden');
+                noPagesMessage.classList.remove('hidden');
+            }
+        }
+
+        // Initial load
+        fetchRepositories();
     </script>
 </body>
-</html> 
+</html>

@@ -39,6 +39,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// Serve the branches visual UI
+app.get('/branches', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'branches.html'));
+});
+
 // Get user's repositories
 app.get('/repos', async (req, res) => {
   try {
@@ -68,7 +73,22 @@ app.get('/repos/:owner/:repo/branches', async (req, res) => {
       per_page: 100
     });
 
-    console.log('branches:', branches);
+    // For each branch, fetch commit parents
+    const branchesWithParents = await Promise.all(
+      branches.map(async branch => {
+        const commitData = await octokit.rest.git.getCommit({
+          owner,
+          repo,
+          commit_sha: branch.commit.sha,
+        });
+        return {
+          ...branch,
+          parents: commitData.data.parents.map(p => p.sha),
+        };
+      })
+    );
+
+    console.log('branches with parents:', branchesWithParents);
 
     // Fetch Vercel deployments if Vercel token is available
     if (process.env.VERCEL_TOKEN) {
@@ -111,7 +131,7 @@ app.get('/repos/:owner/:repo/branches', async (req, res) => {
         });
 
         // Map deployment URLs to branches
-        const branchesWithDeployments = branches.map(branch => {
+        const branchesWithDeployments = branchesWithParents.map(branch => {
           const deployment = vercelData.deployments.find(d => d.meta?.githubCommitSha === branch.commit.sha);
           return {
             ...branch,
@@ -144,8 +164,8 @@ app.get('/repos/:owner/:repo/branches', async (req, res) => {
       console.log('No Vercel token found, skipping Vercel deployment lookup');
     }
 
-    console.log(`Found ${branches.length} branches`);
-    res.json(branches);
+    console.log(`Found ${branchesWithParents.length} branches`);
+    res.json(branchesWithParents);
 
   } catch (error) {
     console.error('Error fetching branches:', error);
