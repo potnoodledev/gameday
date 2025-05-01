@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3000;
 // Serve static files (index.html, games/, etc.)
 app.use(express.static(path.join(__dirname)));
 
+// Serve /github-helper as a static route
+app.use('/github-helper', express.static(path.join(__dirname, 'github-helper', 'public')));
+
 // In-memory leaderboards: { [gameName]: [{ name, score }] }
 const leaderboards = {};
 // Track online status: { [name]: true/false }
