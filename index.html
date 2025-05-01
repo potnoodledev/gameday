@@ -36,7 +36,7 @@
             position: fixed;
             top: 1rem;
             right: 1rem;
-            background: #23272a;
+            background: #23272aCC;
             border-radius: 1rem;
             padding: 1rem;
             box-shadow: 0 2px 12px #0007;
@@ -46,15 +46,12 @@
         }
         @media (max-width: 640px) {
             .leaderboard-overlay {
-                width: 90vw !important;
-                min-width: 0 !important;
-                max-width: 95vw !important;
-                top: 0.5rem !important;
-                right: 0.5rem !important;
-                left: auto !important;
-                border-radius: 1rem !important;
-                padding: 0.75rem !important;
+                display: none !important;
             }
+        }
+        /* Mobile leaderboard sheet transparency */
+        #leaderboardMobileSheet .bg-\[\#23272a\] {
+            background: #23272acc !important;
         }
     </style>
 </head>
@@ -62,6 +59,18 @@
     <div class="leaderboard-overlay" id="leaderboardDesktop">
         <div class="font-bold text-lg mb-2 text-[#b5e3ff]">Leaderboard</div>
         <ul id="leaderboardList" class="space-y-1"></ul>
+    </div>
+    <button id="leaderboardMobileBtn" class="fixed top-3 right-3 z-50 bg-[#b5e3ff] text-[#181a1b] rounded-full p-3 shadow-lg md:hidden" style="display:none;">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 17l4 4 4-4m0-5l-4-4-4 4" /></svg>
+    </button>
+    <div id="leaderboardMobileSheet" class="fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-40 md:hidden" style="display:none;">
+      <div class="w-full max-w-md bg-[#23272a] rounded-t-2xl p-4 pb-8 shadow-2xl">
+        <div class="flex justify-between items-center mb-2">
+          <div class="font-bold text-lg text-[#b5e3ff]">Leaderboard</div>
+          <button id="closeLeaderboardMobile" class="text-2xl text-[#b5e3ff] hover:text-[#ffe082]">&times;</button>
+        </div>
+        <ul id="leaderboardListMobile" class="space-y-1"></ul>
+      </div>
     </div>
     <div id="gameMenu" class="fixed inset-0 flex flex-col items-center justify-center bg-[#181a1b] z-50" style="display:none;">
       <div class="text-3xl font-bold mb-8 text-[#b5e3ff]">Select a Game</div>
@@ -137,6 +146,10 @@
       }
       // --- Leaderboard Logic ---
       const leaderboardList = document.getElementById('leaderboardList');
+      const leaderboardListMobile = document.getElementById('leaderboardListMobile');
+      const leaderboardMobileBtn = document.getElementById('leaderboardMobileBtn');
+      const leaderboardMobileSheet = document.getElementById('leaderboardMobileSheet');
+      const closeLeaderboardMobile = document.getElementById('closeLeaderboardMobile');
       const socket = io();
       let playerName = localStorage.getItem('playerName') || '';
       if (!playerName) {
@@ -171,6 +184,7 @@
       function updateLeaderboard(data) {
         lastLeaderboardData = data;
         leaderboardList.innerHTML = '';
+        leaderboardListMobile.innerHTML = '';
         data.forEach((entry, i) => {
           const li = document.createElement('li');
           li.className = 'flex justify-between items-center px-2 py-1 rounded gap-2';
@@ -187,6 +201,8 @@
           }
           li.innerHTML = `<span>${i+1}. ${nameSpan}</span> <span>${entry.score ?? 0}</span>`;
           leaderboardList.appendChild(li);
+          const liMobile = li.cloneNode(true);
+          leaderboardListMobile.appendChild(liMobile);
         });
       }
       // --- Game <-> Leaderboard Communication ---
@@ -250,6 +266,26 @@
           loadGameFromQuery();
         }
       };
+      // --- Mobile leaderboard toggle logic ---
+      function isMobile() {
+        return window.innerWidth <= 640;
+      }
+      function updateMobileLeaderboardBtn() {
+        if (isMobile()) {
+          leaderboardMobileBtn.style.display = '';
+        } else {
+          leaderboardMobileBtn.style.display = 'none';
+          leaderboardMobileSheet.style.display = 'none';
+        }
+      }
+      leaderboardMobileBtn.onclick = () => {
+        leaderboardMobileSheet.style.display = '';
+      };
+      closeLeaderboardMobile.onclick = () => {
+        leaderboardMobileSheet.style.display = 'none';
+      };
+      window.addEventListener('resize', updateMobileLeaderboardBtn);
+      updateMobileLeaderboardBtn();
     </script>
 </body>
 </html>

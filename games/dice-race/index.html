@@ -9,27 +9,30 @@
   <style>
     body { font-family: 'Fredoka', sans-serif; background: #f8fafc; }
     .board-cell { transition: background 0.2s, box-shadow 0.2s; }
-    .piece { transition: transform 0.3s cubic-bezier(.4,1.6,.4,1); font-family: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, EmojiOne, sans-serif !important; }
+    .piece { transition: transform 0.3s cubic-bezier(.4,1.6,.4,1), box-shadow 0.3s; font-family: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, EmojiOne, sans-serif !important; }
+    .piece-active { box-shadow: 0 0 16px 4px #2563eb88, 0 2px 8px #0002; z-index: 2; border-color: #2563eb !important; }
+    .piece-other { opacity: 0.95; }
     .dice-anim { animation: roll 0.5s cubic-bezier(.4,1.6,.4,1); }
     @keyframes roll { 0% { transform: scale(1.2) rotate(0deg); } 80% { transform: scale(0.9) rotate(360deg); } 100% { transform: scale(1) rotate(0deg); } }
+    .cell-gradient { background: linear-gradient(135deg, #e0f2fe 60%, #fef9c3 100%); }
+    .cell-start { background: linear-gradient(135deg, #fef08a 60%, #facc15 100%); }
   </style>
 </head>
 <body class="min-h-screen min-w-screen flex flex-col bg-gradient-to-br from-blue-100 to-yellow-100 overflow-hidden">
   <div class="flex flex-col items-center justify-center w-full h-full min-h-0 min-w-0 flex-1">
     <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-2xl font-bold tracking-wide text-blue-700 bg-white bg-opacity-80 px-4 py-2 rounded-xl shadow">Dice Race</div>
-    <div class="absolute top-16 left-1/2 -translate-x-1/2 z-10 mb-2 text-gray-700 font-semibold bg-white bg-opacity-80 px-4 py-1 rounded shadow">Steps: <span id="mySteps">0</span> &nbsp;|&nbsp; Player: <span id="myName">...</span></div>
-    <div id="board" class="relative grid grid-cols-12 grid-rows-4 gap-1 w-full h-full max-h-[80vh] max-w-[98vw] aspect-[3/1] mx-auto" style="flex:1;">
+    <div id="board" class="relative grid grid-cols-6 grid-rows-4 gap-1 w-full h-full max-h-[80vh] max-w-[98vw] aspect-[3/1] mx-auto" style="flex:1;">
       <!-- Board cells and pieces will be rendered here -->
     </div>
     <div class="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex items-center gap-4">
-      <button id="rollBtn" class="px-8 py-4 rounded-2xl bg-blue-500 text-white font-bold text-2xl shadow-lg hover:bg-blue-700 transition">ROLL DICE</button>
+      <button id="rollBtn" class="px-8 py-4 rounded-2xl bg-blue-500 text-white font-bold text-2xl shadow-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:grayscale">ROLL DICE</button>
       <div id="dice" class="w-16 h-16 flex items-center justify-center text-4xl font-bold bg-yellow-200 rounded-xl shadow border-2 border-yellow-400">🎲</div>
     </div>
   </div>
   <script type="module">
     import { io } from 'https://cdn.socket.io/4.7.5/socket.io.esm.min.js';
     // --- Board Setup ---
-    const COLS = 12, ROWS = 4;
+    const COLS = 6, ROWS = 4;
     const TOTAL_CELLS = COLS * 2 + (ROWS-2) * 2;
     const board = document.getElementById('board');
     // Generate board path (monopoly style, clockwise)
@@ -78,8 +81,6 @@
     // --- UI Elements ---
     const rollBtn = document.getElementById('rollBtn');
     const diceDiv = document.getElementById('dice');
-    const myStepsSpan = document.getElementById('mySteps');
-    const myNameSpan = document.getElementById('myName');
     // --- Board Rendering ---
     function renderBoard() {
       board.innerHTML = '';
@@ -89,10 +90,10 @@
           const idx = boardPath.findIndex(([rr,cc])=>rr===r&&cc===c);
           const isPath = idx !== -1;
           let cellClass = 'board-cell w-full h-full aspect-square flex flex-col items-center justify-center rounded-lg ';
-          if (isPath) cellClass += 'bg-blue-100 border-2 border-blue-300 ';
+          if (isPath) cellClass += 'cell-gradient border-2 border-blue-300 ';
           else cellClass += 'bg-gray-100 ';
           // Highlight the starting cell
-          if (idx === 0) cellClass += 'ring-4 ring-yellow-400 relative';
+          if (idx === 0) cellClass += 'cell-start ring-4 ring-yellow-400 relative';
           const cell = document.createElement('div');
           cell.className = cellClass;
           cell.style.position = 'relative';
@@ -110,16 +111,16 @@
             cell.appendChild(star);
           }
           // Add cell index label for debugging
-          if (isPath) {
-            const label = document.createElement('span');
-            label.textContent = idx;
-            label.style.fontSize = '0.8em';
-            label.style.color = '#888';
-            label.style.position = 'absolute';
-            label.style.bottom = '4px';
-            label.style.left = '4px';
-            cell.appendChild(label);
-          }
+          // if (isPath) {
+          //   const label = document.createElement('span');
+          //   label.textContent = idx;
+          //   label.style.fontSize = '0.8em';
+          //   label.style.color = '#888';
+          //   label.style.position = 'absolute';
+          //   label.style.bottom = '4px';
+          //   label.style.left = '4px';
+          //   cell.appendChild(label);
+          // }
           board.appendChild(cell);
         }
       }
@@ -142,32 +143,65 @@
           piece.style.top = '50%';
           piece.textContent = emoji || '❓';
           piece.title = name + ' (pos: ' + idx + ')';
+          if (name === playerName) {
+            piece.classList.add('piece-active');
+          } else {
+            piece.classList.add('piece-other');
+          }
           cell.appendChild(piece);
         }
       });
+    }
+    // --- Animate Piece Movement ---
+    function animateMove(name, from, to, steps, callback) {
+      const pathLen = boardPath.length;
+      let cur = from;
+      let count = 0;
+      function step() {
+        cur = (cur + 1) % pathLen;
+        allPlayers[name].pos = cur;
+        renderBoard();
+        count++;
+        if (count < steps) {
+          setTimeout(step, 220); // animation speed
+        } else {
+          callback && callback();
+        }
+      }
+      if (steps > 0) {
+        step();
+      } else {
+        callback && callback();
+      }
     }
     // --- Dice Rolling ---
     function rollDice() {
       const roll = Math.floor(Math.random()*6)+1;
       diceDiv.textContent = roll;
       diceDiv.classList.add('dice-anim');
+      rollBtn.disabled = true;
       setTimeout(()=>diceDiv.classList.remove('dice-anim'), 500);
-      // Move piece
-      myPos = (myPos + roll) % boardPath.length;
-      mySteps += roll;
-      myStepsSpan.textContent = mySteps;
-      // Update allPlayers for local player
-      allPlayers[playerName] = { pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji };
-      // Send score update to parent
-      window.parent.postMessage({ type: 'scoreUpdate', score: mySteps, emoji: myEmoji, pos: myPos }, '*');
-      // Broadcast move to others
-      socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji });
-      renderBoard();
+      // Animate piece movement
+      const oldPos = myPos;
+      const newPos = (myPos + roll) % boardPath.length;
+      const steps = (newPos - oldPos + boardPath.length) % boardPath.length || boardPath.length;
+      animateMove(playerName, oldPos, newPos, steps, () => {
+        myPos = newPos;
+        mySteps += roll;
+        // Update allPlayers for local player
+        allPlayers[playerName] = { pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji };
+        // Send score update to parent
+        window.parent.postMessage({ type: 'scoreUpdate', score: mySteps, emoji: myEmoji, pos: myPos }, '*');
+        // Broadcast move to others
+        socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji });
+        renderBoard();
+        rollBtn.disabled = false;
+      });
     }
     rollBtn.onclick = () => {
-      rollBtn.disabled = true;
-      rollDice();
-      setTimeout(()=>{ rollBtn.disabled = false; }, 700);
+      if (!rollBtn.disabled) {
+        rollDice();
+      }
     };
     // --- Multiplayer Sync ---
     socket.on('move', ({ name, pos, steps, color, emoji }) => {
@@ -183,7 +217,6 @@
     window.addEventListener('message', (event) => {
       if (typeof event.data === 'object' && event.data.type === 'playerName') {
         playerName = event.data.name;
-        myNameSpan.textContent = playerName;
         // Assign color based on name hash
         let hash = 0; for (let i=0;i<playerName.length;i++) hash += playerName.charCodeAt(i);
         myColor = '#2563eb'; // Use a default color for now
@@ -209,8 +242,8 @@
     });
     // --- Listen for all moves to update leaderboard ---
     socket.on('move', ({ name, steps, emoji, pos }) => {
-      // Send leaderboard update to parent
-      if (name && typeof steps === 'number') {
+      // Only send leaderboard update to parent for the local player
+      if (name === playerName && typeof steps === 'number') {
         window.parent.postMessage({ type: 'scoreUpdate', score: steps, name, emoji, pos }, '*');
       }
     });
