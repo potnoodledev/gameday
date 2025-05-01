@@ -98,6 +98,11 @@ io.on('connection', (socket) => {
     io.emit('onlineStatus', onlineStatus);
     currentName = newName;
   });
+
+  // Broadcast player moves to all clients
+  socket.on('move', (data) => {
+    io.emit('move', data);
+  });
 });
 
 server.listen(PORT, () => {

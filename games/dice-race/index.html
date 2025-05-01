@@ -156,6 +156,8 @@
       myPos = (myPos + roll) % boardPath.length;
       mySteps += roll;
       myStepsSpan.textContent = mySteps;
+      // Update allPlayers for local player
+      allPlayers[playerName] = { pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji };
       // Send score update to parent
       window.parent.postMessage({ type: 'scoreUpdate', score: mySteps, emoji: myEmoji, pos: myPos }, '*');
       // Broadcast move to others
@@ -189,6 +191,8 @@
         // Always start at the starting cell
         myPos = 0;
         mySteps = 0;
+        // Ensure local player is in allPlayers with emoji
+        allPlayers[playerName] = { pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji };
         // Announce join
         socket.emit('move', { name: playerName, pos: myPos, steps: mySteps, color: myColor, emoji: myEmoji });
         renderBoard();

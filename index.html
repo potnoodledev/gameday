@@ -176,7 +176,7 @@
           li.className = 'flex justify-between items-center px-2 py-1 rounded gap-2';
           let statusDot = `<span class='inline-block w-3 h-3 rounded-full mr-2' style='background:${onlineUsers[entry.name] ? '#22c55e' : '#888'}'></span>`;
           let emoji = playerEmojis[entry.name] || '';
-          let emojiSpan = emoji ? `<span style="font-family:Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,EmojiOne,sans-serif;font-size:1.3em;">${emoji}</span>` : '';
+          let emojiSpan = emoji ? `<span style="font-family:Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,EmojiOne,sans-serif;font-size:1.8em;line-height:1;">${emoji}</span>` : '';
           let pos = (typeof playerPositions[entry.name] === 'number' && !isNaN(playerPositions[entry.name])) ? playerPositions[entry.name] : ((typeof entry.pos === 'number' && !isNaN(entry.pos)) ? entry.pos : 0);
           let posText = `<span class='ml-1 text-xs text-gray-400'>(pos: ${pos})</span>`;
           let nameSpan = `<span class='flex items-center gap-1'>${statusDot}${emojiSpan}${entry.name}${posText}</span>`;
