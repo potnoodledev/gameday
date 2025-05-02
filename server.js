@@ -20,6 +20,31 @@ const leaderboards = {};
 // Track online status: { [name]: true/false }
 let onlineStatus = {};
 
+// --- Cell Tag Game State ---
+const cellTagState = {
+  cells: {}, // { [socket.id]: { x, y, radius, color, name } }
+  foods: []
+};
+const MAP_SIZE = 3000;
+const START_RADIUS = 40;
+const FOOD_RADIUS = 12;
+const FOOD_COUNT = 80;
+const COLORS = [
+  '#38bdf8','#fbbf24','#f472b6','#34d399','#f87171','#a78bfa','#facc15','#60a5fa','#fb7185','#f472b6','#4ade80','#f59e42','#f472b6','#fcd34d','#818cf8','#f472b6','#fbbf24','#f472b6','#34d399','#f87171'
+];
+function spawnFood() {
+  while (cellTagState.foods.length < FOOD_COUNT) {
+    cellTagState.foods.push({
+      x: Math.random() * MAP_SIZE,
+      y: Math.random() * MAP_SIZE
+    });
+  }
+}
+spawnFood();
+function randomColor() {
+  return COLORS[Math.floor(Math.random() * COLORS.length)];
+}
+
 io.on('connection', (socket) => {
   let currentGame = null;
   let currentName = null;
@@ -64,11 +89,61 @@ io.on('connection', (socket) => {
     io.emit('onlineStatus', onlineStatus);
   });
 
+  socket.on('join', ({ name }) => {
+    // Only for Cell Tag
+    cellTagState.cells[socket.id] = {
+      x: MAP_SIZE/2 + (Math.random()-0.5)*MAP_SIZE/2,
+      y: MAP_SIZE/2 + (Math.random()-0.5)*MAP_SIZE/2,
+      radius: START_RADIUS,
+      color: randomColor(),
+      name: name || 'Player'
+    };
+    socket.emit('state', { cells: cellTagState.cells, foods: cellTagState.foods });
+    io.emit('state', { cells: cellTagState.cells, foods: cellTagState.foods });
+  });
+
+  socket.on('move', ({ dx, dy }) => {
+    const cell = cellTagState.cells[socket.id];
+    if (!cell) return;
+    // Move cell
+    const speed = Math.max(4, 16 - (cell.radius - START_RADIUS) * 0.08);
+    cell.x += dx * speed;
+    cell.y += dy * speed;
+    cell.x = Math.max(cell.radius, Math.min(MAP_SIZE - cell.radius, cell.x));
+    cell.y = Math.max(cell.radius, Math.min(MAP_SIZE - cell.radius, cell.y));
+    // Eat food
+    for (let i = cellTagState.foods.length - 1; i >= 0; i--) {
+      const f = cellTagState.foods[i];
+      const dist = Math.hypot(cell.x - f.x, cell.y - f.y);
+      if (dist < cell.radius + FOOD_RADIUS) {
+        cellTagState.foods.splice(i, 1);
+        cell.radius = Math.min(160, cell.radius + 3);
+      }
+    }
+    spawnFood();
+    // Eat other players
+    for (const [id, other] of Object.entries(cellTagState.cells)) {
+      if (id !== socket.id && other.radius < cell.radius - 8) {
+        const dist = Math.hypot(cell.x - other.x, cell.y - other.y);
+        if (dist < cell.radius) {
+          // Eat the other cell
+          cell.radius = Math.min(160, cell.radius + other.radius * 0.7);
+          other.radius = START_RADIUS;
+          other.x = Math.random() * MAP_SIZE;
+          other.y = Math.random() * MAP_SIZE;
+        }
+      }
+    }
+    io.emit('state', { cells: cellTagState.cells, foods: cellTagState.foods });
+  });
+
   socket.on('disconnect', () => {
     if (currentName) {
       onlineStatus[currentName] = false;
       io.emit('onlineStatus', onlineStatus);
     }
+    delete cellTagState.cells[socket.id];
+    io.emit('state', { cells: cellTagState.cells, foods: cellTagState.foods });
     // Optionally: remove player from leaderboard on disconnect
   });
 
@@ -97,11 +172,6 @@ io.on('connection', (socket) => {
     io.emit('leaderboard', leaderboards[game]);
     io.emit('onlineStatus', onlineStatus);
     currentName = newName;
-  });
-
-  // Broadcast player moves to all clients
-  socket.on('move', (data) => {
-    io.emit('move', data);
   });
 });
 
