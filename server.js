@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 const bodyParser = require('body-parser');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -47,7 +49,8 @@ function randomColor() {
   return COLORS[Math.floor(Math.random() * COLORS.length)];
 }
 
-app.use(bodyParser.text({ type: '*/*', limit: '1mb' }));
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.text({ type: 'text/*', limit: '1mb' }));
 
 io.on('connection', (socket) => {
   let currentGame = null;
@@ -192,6 +195,34 @@ app.post('/games/livegame', (req, res) => {
     if (err) return res.status(500).send('Failed to save');
     res.send('Saved');
   });
+});
+
+app.post('/api/llm-game', async (req, res) => {
+  const messages = req.body.messages;
+  if (!Array.isArray(messages)) return res.status(400).json({ error: 'Missing messages' });
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-nano-2025-04-14',
+        messages,
+        max_completion_tokens: 4096
+      })
+    });
+    const data = await response.json();
+    let html = '';
+    if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+      html = data.choices[0].message.content.trim();
+      if (html.startsWith('```html')) html = html.replace(/^```html\s*/, '').replace(/```$/, '');
+    }
+    res.json({ html });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
 });
 
 server.listen(PORT, () => {

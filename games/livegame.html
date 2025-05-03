@@ -1,112 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pong Game</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Roboto', sans-serif;
-        }
-        #gameCanvas {
-            background-color: #000;
-            display: block;
-            margin: 0 auto;
-            border: 2px solid #fff;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tic Tac Toe</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 flex items-center justify-center min-h-screen">
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
-    <script type="module">
-        const canvas = document.getElementById('gameCanvas');
-        const context = canvas.getContext('2d');
+<body class="bg-gray-100 flex items-center justify-center min-h-screen font-['Roboto']">
+  <div class="w-full max-w-md p-4 bg-white rounded-lg shadow-lg">
+    <h1 class="text-2xl font-semibold text-center mb-4">Tic Tac Toe</h1>
+    <div class="flex justify-center mb-4 text-lg font-medium" id="status">Player X's turn</div>
+    <div class="grid grid-cols-3 gap-2 mb-4" id="board">
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
+    </div>
+    <button class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition" id="reset">Reset Game</button>
+  </div>
 
-        const paddleWidth = 10, paddleHeight = 100;
-        const ballSize = 10;
-        let playerY = canvas.height / 2 - paddleHeight / 2;
-        let aiY = canvas.height / 2 - paddleHeight / 2;
-        let ballX = canvas.width / 2, ballY = canvas.height / 2;
-        let ballSpeedX = 5, ballSpeedY = 5;
+  <script type="module">
+    const cells = document.querySelectorAll("[data-cell]");
+    const statusText = document.getElementById("status");
+    const resetButton = document.getElementById("reset");
 
-        function drawRect(x, y, width, height, color) {
-            context.fillStyle = color;
-            context.fillRect(x, y, width, height);
-        }
+    let currentPlayer = 'X';
+    let gameActive = true;
+    let board = Array(9).fill(null);
+    const winningConditions = [
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
+    ];
 
-        function drawCircle(x, y, radius, color) {
-            context.fillStyle = color;
-            context.beginPath();
-            context.arc(x, y, radius, 0, Math.PI * 2, true);
-            context.fill();
-        }
+    function handleCellClick(e) {
+      const index = Array.from(cells).indexOf(e.target);
+      if (board[index] || !gameActive) return;
+      board[index] = currentPlayer;
+      e.target.textContent = currentPlayer;
+      if (checkWin()) {
+        statusText.textContent = `Player ${currentPlayer} wins!`;
+        gameActive = false;
+        return;
+      }
+      if (board.every(cell => cell)) {
+        statusText.textContent = "It's a draw!";
+        gameActive = false;
+        return;
+      }
+      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+      statusText.textContent = `Player ${currentPlayer}'s turn`;
+    }
 
-        function drawNet() {
-            for (let i = 0; i < canvas.height; i += 20) {
-                drawRect(canvas.width / 2 - 1, i, 2, 10, '#fff');
-            }
-        }
+    function checkWin() {
+      return winningConditions.some(combination => {
+        const [a, b, c] = combination;
+        return board[a] && board[a] === board[b] && board[a] === board[c];
+      });
+    }
 
-        function moveBall() {
-            ballX += ballSpeedX;
-            ballY += ballSpeedY;
+    function resetGame() {
+      board.fill(null);
+      cells.forEach(cell => (cell.textContent = ''));
+      currentPlayer = 'X';
+      gameActive = true;
+      statusText.textContent = `Player ${currentPlayer}'s turn`;
+    }
 
-            if (ballY <= 0 || ballY >= canvas.height) {
-                ballSpeedY = -ballSpeedY;
-            }
-
-            if (ballX <= paddleWidth) {
-                if (ballY > playerY && ballY < playerY + paddleHeight) {
-                    ballSpeedX = -ballSpeedX;
-                } else {
-                    resetBall();
-                }
-            }
-
-            if (ballX >= canvas.width - paddleWidth) {
-                if (ballY > aiY && ballY < aiY + paddleHeight) {
-                    ballSpeedX = -ballSpeedX;
-                } else {
-                    resetBall();
-                }
-            }
-        }
-
-        function resetBall() {
-            ballX = canvas.width / 2;
-            ballY = canvas.height / 2;
-            ballSpeedX = -ballSpeedX;
-        }
-
-        function moveAI() {
-            const aiCenter = aiY + paddleHeight / 2;
-            if (aiCenter < ballY - 35) {
-                aiY += 6;
-            } else if (aiCenter > ballY + 35) {
-                aiY -= 6;
-            }
-        }
-
-        function gameLoop() {
-            drawRect(0, 0, canvas.width, canvas.height, '#000');
-            drawNet();
-            drawRect(0, playerY, paddleWidth, paddleHeight, '#fff');
-            drawRect(canvas.width - paddleWidth, aiY, paddleWidth, paddleHeight, '#fff');
-            drawCircle(ballX, ballY, ballSize, '#fff');
-
-            moveBall();
-            moveAI();
-        }
-
-        canvas.addEventListener('mousemove', (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const root = document.documentElement;
-            playerY = event.clientY - rect.top - root.scrollTop - paddleHeight / 2;
-        });
-
-        setInterval(gameLoop, 1000 / 60);
-    </script>
+    cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+    resetButton.addEventListener('click', resetGame);
+  </script>
 </body>
 </html>

@@ -82,10 +82,6 @@
       <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl flex flex-col gap-4 relative">
         <button id="closeLiveGameEditor" class="absolute top-4 right-4 text-2xl text-pink-400 hover:text-pink-600">&times;</button>
         <div class="text-2xl font-bold text-pink-600 mb-2">Chat to Build Live Game</div>
-        <div class="mb-2">
-          <label class="block text-sm font-bold text-pink-600 mb-1" for="openaiApiKey">OpenAI API Key</label>
-          <input id="openaiApiKey" type="password" class="w-full rounded border border-pink-300 p-2 text-gray-900 bg-pink-50" placeholder="sk-..." autocomplete="off" />
-        </div>
         <div id="llmChatHistory" class="flex-1 min-h-[180px] max-h-64 overflow-y-auto bg-pink-50 rounded p-3 mb-2 text-gray-900 text-sm font-mono"></div>
         <form id="llmChatForm" class="flex gap-2 items-center mt-2">
           <input id="llmChatInput" class="flex-1 rounded border border-pink-300 p-2 text-gray-900 bg-white" placeholder="Describe the game or change you want..." autocomplete="off" />
@@ -314,12 +310,12 @@
       const liveGameEditorModal = document.getElementById('liveGameEditorModal');
       const closeLiveGameEditor = document.getElementById('closeLiveGameEditor');
       const liveGamePreview = document.getElementById('liveGamePreview');
-      const openaiApiKeyInput = document.getElementById('openaiApiKey');
+      const openaiApiKeyInput = undefined; // No longer used
       const llmChatHistory = document.getElementById('llmChatHistory');
       const llmChatForm = document.getElementById('llmChatForm');
       const llmChatInput = document.getElementById('llmChatInput');
       let llmChatMessages = [
-        { role: 'system', content: 'You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Do not include explanations, only output the HTML.' }
+        { role: 'system', content: 'You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascrip alerts. Do not include explanations, only output the HTML.' }
       ];
       function renderChat() {
         llmChatHistory.innerHTML = llmChatMessages.filter(m => m.role !== 'system').map(m =>
@@ -357,35 +353,19 @@
         llmChatMessages.push({ role: 'user', content: prompt });
         renderChat();
         llmChatInput.value = '';
-        // Call OpenAI API
-        const apiKey = openaiApiKeyInput.value.trim();
-        if (!apiKey) {
-          llmChatMessages.push({ role: 'assistant', content: 'Please enter your OpenAI API key.' });
-          renderChat();
-          return;
-        }
         llmChatMessages.push({ role: 'assistant', content: 'Generating game code...' });
         renderChat();
         try {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          // Call backend endpoint to handle OpenAI API call
+          const response = await fetch('/api/llm-game', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o',
-              messages: llmChatMessages.filter(m => m.role !== 'assistant' || m.content !== 'Generating game code...'),
-              max_tokens: 4096,
-              temperature: 0.2
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: llmChatMessages.filter(m => m.role !== 'assistant' || m.content !== 'Generating game code...') })
           });
           const data = await response.json();
           let html = '';
-          if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
-            html = data.choices[0].message.content.trim();
-            // Remove code block markers if present
-            if (html.startsWith('```html')) html = html.replace(/^```html\s*/, '').replace(/```$/, '');
+          if (data.html) {
+            html = data.html.trim();
             // Save to server
             await fetch('/games/livegame', {
               method: 'POST',
