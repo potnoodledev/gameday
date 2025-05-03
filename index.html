@@ -77,6 +77,26 @@
       <div id="gameMenuList" class="flex flex-col gap-4 w-full max-w-xs"></div>
     </div>
     <iframe id="gameFrame" src="" class="game-iframe" allowfullscreen style="display:none;"></iframe>
+    <button id="editLiveGameBtn" class="fixed bottom-6 left-6 w-14 h-14 rounded-full bg-pink-400 text-white text-3xl shadow-lg flex items-center justify-center z-50 hover:bg-pink-600 transition" style="display:none;">✏️</button>
+    <div id="liveGameEditorModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60" style="display:none;">
+      <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl flex flex-col gap-4 relative">
+        <button id="closeLiveGameEditor" class="absolute top-4 right-4 text-2xl text-pink-400 hover:text-pink-600">&times;</button>
+        <div class="text-2xl font-bold text-pink-600 mb-2">Chat to Build Live Game</div>
+        <div class="mb-2">
+          <label class="block text-sm font-bold text-pink-600 mb-1" for="openaiApiKey">OpenAI API Key</label>
+          <input id="openaiApiKey" type="password" class="w-full rounded border border-pink-300 p-2 text-gray-900 bg-pink-50" placeholder="sk-..." autocomplete="off" />
+        </div>
+        <div id="llmChatHistory" class="flex-1 min-h-[180px] max-h-64 overflow-y-auto bg-pink-50 rounded p-3 mb-2 text-gray-900 text-sm font-mono"></div>
+        <form id="llmChatForm" class="flex gap-2 items-center mt-2">
+          <input id="llmChatInput" class="flex-1 rounded border border-pink-300 p-2 text-gray-900 bg-white" placeholder="Describe the game or change you want..." autocomplete="off" />
+          <button type="submit" class="px-4 py-2 bg-pink-500 text-white rounded-lg font-bold shadow hover:bg-pink-700 transition">Send</button>
+        </form>
+        <div class="mt-4">
+          <div class="text-lg font-bold mb-1 text-pink-600">Live Preview</div>
+          <iframe id="liveGamePreview" class="w-full h-64 border-2 border-pink-200 rounded-lg shadow" src="/games/livegame"></iframe>
+        </div>
+      </div>
+    </div>
     <button id="settingsBtn" class="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[#b5e3ff] text-[#181a1b] text-3xl shadow-lg flex items-center justify-center z-50 hover:bg-[#ffe082] transition">⚙️</button>
     <div id="settingsMenu" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50" style="display:none;">
       <div class="bg-[#23272a] rounded-2xl p-8 w-full max-w-xs shadow-2xl relative flex flex-col gap-6">
@@ -100,7 +120,8 @@
       const games = [
         { name: 'Bee Colony Simulator', path: 'bee-colony-simulator/index.html', id: 'bee-colony-simulator' },
         { name: 'Dice Race', path: 'dice-race/index.html', id: 'dice-race' },
-        { name: 'Cell Tag', path: 'cell-tag/index.html', id: 'cell-tag' }
+        { name: 'Cell Tag', path: 'cell-tag/index.html', id: 'cell-tag' },
+        { name: 'Live Game', path: 'livegame', id: 'livegame' }
       ];
       // --- Query Param Helper ---
       function getQueryParam(name) {
@@ -141,6 +162,7 @@
           currentGame = game;
           socket.emit('playerJoined', { name: playerName, game: currentGame.name });
           sendPlayerNameToGame();
+          showEditBtnIfLiveGame();
         } else {
           showGameMenu();
         }
@@ -287,6 +309,102 @@
       };
       window.addEventListener('resize', updateMobileLeaderboardBtn);
       updateMobileLeaderboardBtn();
+      // --- Edit Live Game Logic ---
+      const editLiveGameBtn = document.getElementById('editLiveGameBtn');
+      const liveGameEditorModal = document.getElementById('liveGameEditorModal');
+      const closeLiveGameEditor = document.getElementById('closeLiveGameEditor');
+      const liveGamePreview = document.getElementById('liveGamePreview');
+      const openaiApiKeyInput = document.getElementById('openaiApiKey');
+      const llmChatHistory = document.getElementById('llmChatHistory');
+      const llmChatForm = document.getElementById('llmChatForm');
+      const llmChatInput = document.getElementById('llmChatInput');
+      let llmChatMessages = [
+        { role: 'system', content: 'You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Do not include explanations, only output the HTML.' }
+      ];
+      function renderChat() {
+        llmChatHistory.innerHTML = llmChatMessages.filter(m => m.role !== 'system').map(m =>
+          `<div class='mb-2'><span class='font-bold ${m.role === 'user' ? 'text-pink-700' : 'text-blue-700'}'>${m.role === 'user' ? 'You' : 'AI'}:</span> <span>${m.content.replace(/</g,'&lt;')}</span></div>`
+        ).join('');
+        llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+      }
+      function showEditBtnIfLiveGame() {
+        if (currentGame && currentGame.id === 'livegame') {
+          editLiveGameBtn.style.display = '';
+        } else {
+          editLiveGameBtn.style.display = 'none';
+          liveGameEditorModal.style.display = 'none';
+        }
+      }
+      const origLoadGameFromQuery = loadGameFromQuery;
+      loadGameFromQuery = function() {
+        origLoadGameFromQuery();
+        showEditBtnIfLiveGame();
+      };
+      showEditBtnIfLiveGame();
+      editLiveGameBtn.onclick = () => {
+        liveGameEditorModal.style.display = '';
+        llmChatInput.value = '';
+        renderChat();
+        liveGamePreview.src = '/games/livegame?' + Date.now();
+      };
+      closeLiveGameEditor.onclick = () => {
+        liveGameEditorModal.style.display = 'none';
+      };
+      llmChatForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const prompt = llmChatInput.value.trim();
+        if (!prompt) return;
+        llmChatMessages.push({ role: 'user', content: prompt });
+        renderChat();
+        llmChatInput.value = '';
+        // Call OpenAI API
+        const apiKey = openaiApiKeyInput.value.trim();
+        if (!apiKey) {
+          llmChatMessages.push({ role: 'assistant', content: 'Please enter your OpenAI API key.' });
+          renderChat();
+          return;
+        }
+        llmChatMessages.push({ role: 'assistant', content: 'Generating game code...' });
+        renderChat();
+        try {
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o',
+              messages: llmChatMessages.filter(m => m.role !== 'assistant' || m.content !== 'Generating game code...'),
+              max_tokens: 4096,
+              temperature: 0.2
+            })
+          });
+          const data = await response.json();
+          let html = '';
+          if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+            html = data.choices[0].message.content.trim();
+            // Remove code block markers if present
+            if (html.startsWith('```html')) html = html.replace(/^```html\s*/, '').replace(/```$/, '');
+            // Save to server
+            await fetch('/games/livegame', {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/html' },
+              body: html
+            });
+            liveGamePreview.src = '/games/livegame?' + Date.now();
+            if (currentGame && currentGame.id === 'livegame') {
+              gameFrame.contentWindow.location.reload();
+            }
+            llmChatMessages.push({ role: 'assistant', content: 'Game updated! (see preview below)' });
+          } else {
+            llmChatMessages.push({ role: 'assistant', content: 'No response from LLM.' });
+          }
+        } catch (err) {
+          llmChatMessages.push({ role: 'assistant', content: 'Error: ' + (err.message || err) });
+        }
+        renderChat();
+      };
     </script>
 </body>
 </html>

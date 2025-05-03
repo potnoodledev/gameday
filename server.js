@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,6 +46,8 @@ spawnFood();
 function randomColor() {
   return COLORS[Math.floor(Math.random() * COLORS.length)];
 }
+
+app.use(bodyParser.text({ type: '*/*', limit: '1mb' }));
 
 io.on('connection', (socket) => {
   let currentGame = null;
@@ -172,6 +176,21 @@ io.on('connection', (socket) => {
     io.emit('leaderboard', leaderboards[game]);
     io.emit('onlineStatus', onlineStatus);
     currentName = newName;
+  });
+});
+
+app.get('/games/livegame', (req, res) => {
+  fs.readFile(path.join(__dirname, 'games', 'livegame.html'), 'utf8', (err, data) => {
+    if (err) return res.status(404).send('Game not found');
+    res.set('Content-Type', 'text/html');
+    res.send(data);
+  });
+});
+
+app.post('/games/livegame', (req, res) => {
+  fs.writeFile(path.join(__dirname, 'games', 'livegame.html'), req.body, 'utf8', (err) => {
+    if (err) return res.status(500).send('Failed to save');
+    res.send('Saved');
   });
 });
 
