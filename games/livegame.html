@@ -1,85 +1,274 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tic Tac Toe</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen font-['Roboto']">
-  <div class="w-full max-w-md p-4 bg-white rounded-lg shadow-lg">
-    <h1 class="text-2xl font-semibold text-center mb-4">Tic Tac Toe</h1>
-    <div class="flex justify-center mb-4 text-lg font-medium" id="status">Player X's turn</div>
-    <div class="grid grid-cols-3 gap-2 mb-4" id="board">
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-      <button class="w-full aspect-square bg-gray-200 text-3xl font-bold flex items-center justify-center rounded-lg hover:bg-gray-300 transition" data-cell></button>
-    </div>
-    <button class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition" id="reset">Reset Game</button>
-  </div>
-
-  <script type="module">
-    const cells = document.querySelectorAll("[data-cell]");
-    const statusText = document.getElementById("status");
-    const resetButton = document.getElementById("reset");
-
-    let currentPlayer = 'X';
-    let gameActive = true;
-    let board = Array(9).fill(null);
-    const winningConditions = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ];
-
-    function handleCellClick(e) {
-      const index = Array.from(cells).indexOf(e.target);
-      if (board[index] || !gameActive) return;
-      board[index] = currentPlayer;
-      e.target.textContent = currentPlayer;
-      if (checkWin()) {
-        statusText.textContent = `Player ${currentPlayer} wins!`;
-        gameActive = false;
-        return;
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1.0"
+    />
+    <title>Three.js Driving Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: 'Montserrat', sans-serif;
+        background: #10171e;
       }
-      if (board.every(cell => cell)) {
-        statusText.textContent = "It's a draw!";
-        gameActive = false;
-        return;
-      }
-      currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-      statusText.textContent = `Player ${currentPlayer}'s turn`;
-    }
+      canvas { display: block; outline: none; }
+    </style>
+  </head>
+  <body class="flex flex-col items-center justify-between min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-0 m-0">
+    <header class="pt-5 pb-3">
+      <h1 class="text-white text-2xl font-bold tracking-wide uppercase drop-shadow-lg text-center">Three.js Driving Game</h1>
+    </header>
+    <main class="flex flex-col items-center flex-1 w-full">
+      <div id="game-ui" class="absolute top-0 left-0 z-10 w-full flex flex-col items-center">
+        <div id="score" class="rounded bg-slate-900 bg-opacity-70 shadow px-4 py-2 mt-4 text-white text-lg font-bold">Score: 0</div>
+        <div id="gameover" class="hidden mt-8 flex flex-col items-center">
+          <span class="text-3xl font-bold text-red-400 mb-2">Game Over!</span>
+          <button id="restart" class="bg-indigo-500 hover:bg-indigo-700 text-white mt-2 px-6 py-2 rounded shadow font-bold">Restart</button>
+        </div>
+      </div>
+      <div id="game-container" class="relative w-full max-w-xs h-[70vw] max-h-[80vh] min-h-[300px] border-4 border-slate-600 rounded-lg shadow-lg overflow-hidden bg-black">
+      </div>
+      <div class="mt-6 text-white text-center opacity-80 text-sm">Tilt device or use arrow keys to steer • Avoid obstacles!</div>
+    </main>
+    <script type="module">
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
 
-    function checkWin() {
-      return winningConditions.some(combination => {
-        const [a, b, c] = combination;
-        return board[a] && board[a] === board[b] && board[a] === board[c];
+      // Responsive canvas
+      const container = document.getElementById('game-container');
+      let width = container.clientWidth;
+      let height = container.clientHeight;
+
+      // Three.js scene basics
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a2232);
+
+      const camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 100);
+      camera.position.set(0, 5, 10);
+      camera.lookAt(0, 0, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setClearColor(0x000000, 1);
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(renderer.domElement);
+
+      // Lighting
+      const ambient = new THREE.AmbientLight(0xffffff, 0.85);
+      scene.add(ambient);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+      dir.position.set(0, 20, 20);
+      scene.add(dir);
+
+      // Road
+      const roadWidth = 5, roadLen = 100;
+      const roadGeo = new THREE.BoxGeometry(roadWidth, 0.1, roadLen);
+      const roadMat = new THREE.MeshStandardMaterial({ color: 0x333846 });
+      const road = new THREE.Mesh(roadGeo, roadMat);
+      road.position.z = -roadLen / 2;
+      scene.add(road);
+
+      // Road lines
+      function addRoadLines() {
+        const lineMat = new THREE.MeshStandardMaterial({ color: 0xf8e71c });
+        for (let i = 2; i < 98; i += 3) {
+          const lineGeo = new THREE.BoxGeometry(0.2, 0.05, 0.8);
+          const mesh = new THREE.Mesh(lineGeo, lineMat);
+          mesh.position.set(0, 0.08, -i);
+          scene.add(mesh);
+        }
+      }
+      addRoadLines();
+
+      // Player car
+      const carW = 0.7, carH = 0.25, carL = 1.5;
+      const player = new THREE.Group();
+      const carBody = new THREE.Mesh(
+        new THREE.BoxGeometry(carW, carH, carL),
+        new THREE.MeshStandardMaterial({ color: 0x2596be })
+      );
+      carBody.position.y = 0.23;
+      player.add(carBody);
+
+      // Simple windshield/roof
+      const top = new THREE.Mesh(
+        new THREE.BoxGeometry(carW * 0.85, carH * 0.65, carL * 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x046380, metalness: 0.8, roughness: 0.2, transparent: true, opacity: 0.92 })
+      );
+      top.position.set(0, 0.41, 0.1);
+      player.add(top);
+
+      player.position.set(0, 0.15, 2);
+      scene.add(player);
+
+      // Controls
+      let steer = 0;
+      let moveLeft = false, moveRight = false;
+      let tiltVal = 0;
+
+      // Mobile tilt controls
+      window.addEventListener('deviceorientation', (e) => {
+        if (e.gamma !== null) {
+          tiltVal = e.gamma / 25; // range roughly -1 to 1
+        }
       });
-    }
 
-    function resetGame() {
-      board.fill(null);
-      cells.forEach(cell => (cell.textContent = ''));
-      currentPlayer = 'X';
-      gameActive = true;
-      statusText.textContent = `Player ${currentPlayer}'s turn`;
-    }
+      // Keyboard controls
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveLeft = true;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') moveRight = true;
+      });
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveLeft = false;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') moveRight = false;
+      });
 
-    cells.forEach(cell => cell.addEventListener('click', handleCellClick));
-    resetButton.addEventListener('click', resetGame);
-  </script>
-</body>
+      // Obstacles
+      const obstacles = [];
+      let nextObsZ = -5;
+      let obsSpacing = 5;
+      let speed = 0.16;
+      let maxSteer = roadWidth / 2 - carW * 0.7;
+
+      function createObstacle(zPos) {
+        // Random X location, always on road, never directly on you
+        const lanes = [-1.6, 0, 1.6];
+        const x = lanes[Math.floor(Math.random() * lanes.length)];
+        const obsWidth = 0.85 + Math.random() * 0.4;
+        const obsLength = 1 + Math.random() * 0.4;
+        const geo = new THREE.BoxGeometry(obsWidth, 0.35, obsLength);
+        const color = new THREE.Color().setHSL(0.05 + Math.random() * 0.12, 0.7, 0.65);
+        const mat = new THREE.MeshStandardMaterial({ color: color.getHex() });
+        const obs = new THREE.Mesh(geo, mat);
+        obs.position.set(x, 0.19, zPos);
+        obs.castShadow = true;
+        scene.add(obs);
+        obstacles.push(obs);
+      }
+
+      function resetObstacles() {
+        for (const o of obstacles) scene.remove(o);
+        obstacles.length = 0;
+        nextObsZ = -5;
+        for (let i = 0; i < 6; i++) {
+          createObstacle(nextObsZ);
+          nextObsZ -= obsSpacing;
+        }
+      }
+
+      function spawnObsIfNeeded() {
+        while (nextObsZ > player.position.z - 70) {
+          createObstacle(nextObsZ);
+          nextObsZ -= obsSpacing;
+          obsSpacing = 5 + Math.random() * 1;
+        }
+      }
+
+      // Score & UI
+      let score = 0, bestScore = 0;
+      let gameover = false;
+      const scoreEl = document.getElementById('score');
+      const gameoverUI = document.getElementById('gameover');
+      const restartBtn = document.getElementById('restart');
+
+      function updateScore(delta) {
+        if (gameover) return;
+        score += delta;
+        scoreEl.textContent = `Score: ${Math.floor(score)}${bestScore>0 ? ' (Best '+Math.floor(bestScore)+')' : ''}`;
+      }
+
+      // Game loop & logic
+      function resetGame() {
+        gameover = false;
+        score = 0;
+        steer = 0; tiltVal = 0;
+        player.position.set(0, 0.15, 2);
+        player.rotation.y = 0;
+        speed = 0.16;
+        obsSpacing = 5;
+        resetObstacles();
+        updateScore(0);
+        gameoverUI.classList.add('hidden');
+      }
+
+      restartBtn.addEventListener('click', resetGame);
+
+      function hitTest(a, b) {
+        // Simple bounding box, all boxes
+        return (
+          Math.abs(a.position.x - b.position.x) < (carW * 0.5 + b.geometry.parameters.width * 0.5) &&
+          Math.abs(a.position.z - b.position.z) < (carL * 0.5 + b.geometry.parameters.depth * 0.5)
+        );
+      }
+
+      // Resize
+      function onResize() {
+        width = container.clientWidth;
+        height = container.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      }
+      window.addEventListener("resize", onResize);
+
+      // Game loop
+      let lastTime = performance.now();
+      function animate() {
+        const now = performance.now();
+        const dt = Math.min(80, now - lastTime) / 1000;
+        lastTime = now;
+        
+        // Speed up based on score
+        speed = Math.min(0.28, 0.16 + 0.0035 * score);
+        if (!gameover) {
+          // Steer input: tilt or arrow keys
+          let input = 0;
+          if (Math.abs(tiltVal) > 0.18) input = THREE.MathUtils.clamp(tiltVal, -1, 1);
+          else if (moveLeft) input = -1;
+          else if (moveRight) input = 1;
+          steer += (input - steer) * 0.2;
+          player.position.x += steer * 0.13;
+          player.position.x = THREE.MathUtils.clamp(player.position.x, -maxSteer, maxSteer);
+
+          // Sway/lean
+          player.rotation.z = -steer * 0.13;
+          player.rotation.y = steer * 0.07;
+
+          // Move road "back" (move car forward)
+          player.position.z -= speed * dt * 60;
+          updateScore(speed * dt * 27);
+
+          // Scroll camera with car
+          camera.position.z = player.position.z + 6;
+          camera.lookAt(player.position.x, 0, player.position.z - 8);
+
+          // Obstacles logic
+          spawnObsIfNeeded();
+          for (let o of obstacles) {
+            // Remove behind
+            if (o.position.z > player.position.z + 7) {
+              scene.remove(o);
+            }
+          }
+          while (obstacles.length && obstacles[0].position.z > player.position.z + 7) {
+            obstacles.shift();
+          }
+          // Collision check
+          for (let o of obstacles) {
+            if (hitTest(player, o)) {
+              gameover = true;
+              bestScore = Math.max(bestScore, score);
+              gameoverUI.classList.remove('hidden');
+            }
+          }
+        }
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      resetGame();
+      animate();
+    </script>
+  </body>
 </html>
