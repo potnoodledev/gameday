@@ -84,6 +84,10 @@
         <div class="text-2xl font-bold text-pink-600 mb-2">Chat to Build Live Game</div>
         <div id="llmChatHistory" class="flex-1 min-h-[180px] max-h-64 overflow-y-auto bg-pink-50 rounded p-3 mb-2 text-gray-900 text-sm font-mono"></div>
         <form id="llmChatForm" class="flex gap-2 items-center mt-2">
+          <select id="llmModelSelect" class="rounded border border-pink-300 p-2 text-gray-900 bg-white font-mono">
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
           <input id="llmChatInput" class="flex-1 rounded border border-pink-300 p-2 text-gray-900 bg-white" placeholder="Describe the game or change you want..." autocomplete="off" />
           <button type="submit" class="px-4 py-2 bg-pink-500 text-white rounded-lg font-bold shadow hover:bg-pink-700 transition">Send</button>
         </form>
@@ -356,8 +360,11 @@
         llmChatMessages.push({ role: 'assistant', content: 'Generating game code...' });
         renderChat();
         try {
-          // Call backend endpoint to handle OpenAI API call
-          const response = await fetch('/api/llm-game', {
+          // Model selection
+          const model = document.getElementById('llmModelSelect').value;
+          const endpoint = model === 'gemini' ? '/api/llm-game/gemini' : '/api/llm-game/openai';
+          // Call backend endpoint to handle LLM API call
+          const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messages: llmChatMessages.filter(m => m.role !== 'assistant' || m.content !== 'Generating game code...') })

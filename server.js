@@ -197,7 +197,7 @@ app.post('/games/livegame', (req, res) => {
   });
 });
 
-app.post('/api/llm-game', async (req, res) => {
+app.post('/api/llm-game/openai', async (req, res) => {
   const messages = req.body.messages;
   if (!Array.isArray(messages)) return res.status(400).json({ error: 'Missing messages' });
   try {
@@ -219,6 +219,51 @@ app.post('/api/llm-game', async (req, res) => {
     if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
       html = data.choices[0].message.content.trim();
       if (html.startsWith('```html')) html = html.replace(/^```html\s*/, '').replace(/```$/, '');
+    }
+    res.json({ html });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+app.post('/api/llm-game/gemini', async (req, res) => {
+  const messages = req.body.messages;
+  if (!Array.isArray(messages)) return res.status(400).json({ error: 'Missing messages' });
+  try {
+    // Dynamically import @google/genai
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    // Convert OpenAI-style messages to Gemini format (parts must be [{ text }], role must be 'user' or 'model')
+    const geminiMessages = messages.map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content }]
+    }));
+    // Add system instructions as the first message if not present
+    const SYSTEM_INSTRUCTIONS = `You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascrip alerts. Do not include explanations, only output the HTML.`;
+    if (!geminiMessages.length || geminiMessages[0].role !== 'system') {
+      geminiMessages.unshift({ role: 'user', parts: [{ text: SYSTEM_INSTRUCTIONS }] });
+    }
+    // Use the latest SDK call with streaming
+    const config = { responseMimeType: 'text/plain' };
+    let html = '';
+    let fullText = '';
+    const responseStream = await ai.models.generateContentStream({
+      model: 'gemini-2.5-pro-exp-03-25',
+      config,
+      contents: geminiMessages
+    });
+    for await (const chunk of responseStream) {
+      if (chunk && chunk.text) {
+        console.log(chunk.text);
+        fullText += chunk.text;
+      }
+    }
+    // Try to extract code block
+    const codeMatch = fullText.match(/```(?:html|javascript)?([\s\S]*?)```/);
+    if (codeMatch) {
+      html = codeMatch[1].trim();
+    } else {
+      html = fullText.trim();
     }
     res.json({ html });
   } catch (err) {
