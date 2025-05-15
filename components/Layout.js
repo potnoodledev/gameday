@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { io } from 'socket.io-client';
+import { useWallet } from '@solana/wallet-adapter-react';
 import WalletMultiButton from './WalletMultiButton'; // Assuming WalletMultiButton is in the same components folder
 
 export const games = [
@@ -13,6 +15,7 @@ export const games = [
 
 export default function Layout({ children, currentGameIdFromProp }) {
   const router = useRouter();
+  const { connected, publicKey } = useWallet();
 
   const leaderboardListRef = useRef(null);
   const leaderboardListMobileRef = useRef(null);
@@ -434,7 +437,17 @@ export default function Layout({ children, currentGameIdFromProp }) {
         <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
       </Head>
 
-      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100 }}>
+      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        {connected && publicKey && (
+          <Link href="/profile" passHref>
+            <button 
+              className="px-4 py-2 bg-pink-500 text-white text-sm font-bold rounded-md hover:bg-pink-600 transition-colors"
+              style={{ height: '40px' }}
+            >
+              Profile
+            </button>
+          </Link>
+        )}
         <WalletMultiButton />
       </div>
 
