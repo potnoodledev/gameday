@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Driving Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    #gameCanvas { width: 100% !important; height: 320px !important; background: #9ad1ff; border-radius: 0.75rem; touch-action: none; }
+    @media (min-width: 640px) {
+      #gameCanvas { height: 480px !important; }
+    }
+    .btn { background: linear-gradient(90deg,#60a5fa,#34d399); color:white; font-weight:600; }
+    .btn:active { background: #34d399; }
+  </style>
+</head>
+<body class="bg-blue-100 min-h-screen flex flex-col">
+  <header class="p-4 bg-gradient-to-r from-blue-400 to-blue-600 text-white shadow-lg rounded-b-md">
+    <h1 class="text-2xl font-bold text-center">3D Driving Game</h1>
+    <p class="text-sm text-center mt-1">Race down the endless highway. Dodge traffic. Score high!</p>
+  </header>
+  <main class="flex-1 flex flex-col items-center justify-start mt-4 px-2">
+    <div class="w-full max-w-xl flex flex-col gap-3">
+      <div class="flex justify-between bg-white rounded-xl shadow px-4 py-2 mb-1">
+        <div>
+          <span class="text-xs text-gray-500">Score</span>
+          <div class="font-bold text-lg text-blue-600" id="scoreDisplay">0</div>
+        </div>
+        <div>
+          <span class="text-xs text-gray-500">Speed</span>
+          <div class="font-bold text-lg text-emerald-600" id="speedDisplay">100</div>
+        </div>
+      </div>
+      <canvas id="gameCanvas" class="mb-2"></canvas>
+      <div class="flex flex-row justify-center items-center gap-4 sm:hidden">
+        <button id="leftBtn" class="btn rounded-full w-16 h-16 text-2xl flex items-center justify-center shadow">⟵</button>
+        <button id="rightBtn" class="btn rounded-full w-16 h-16 text-2xl flex items-center justify-center shadow">⟶</button>
+      </div>
+      <div id="gameOver" class="hidden flex flex-col items-center justify-center absolute top-0 left-0 w-full h-full bg-black/50">
+        <div class="bg-white/90 p-6 rounded-lg shadow-lg text-center">
+          <h2 class="text-2xl font-bold text-red-600 mb-2">Game Over!</h2>
+          <div class="mb-2 text-lg">Final Score: <span id="finalScore" class="font-bold"></span></div>
+          <button id="restartBtn" class="btn px-6 py-2 rounded-md mt-2">Restart</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script type="module">
+    // Setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let W = 320, H = 320;
+
+    function setSize() {
+      const bcr = canvas.getBoundingClientRect();
+      W = Math.round(bcr.width);
+      H = Math.round(bcr.height);
+      canvas.width = W; canvas.height = H;
+      // Re-calculate lanes based on new width
+      for(let i=0; i<laneCount; ++i) {
+        lanes[i] = W * (0.2 + 0.3 * i);
+      }
+      car.width = W*0.16;
+      car.height = H*0.14;
+      car.y = H * 0.75;
+    }
+    
+    window.addEventListener('resize', setSize);
+
+    // Game vars
+    let running = true;
+    let score = 0;
+    let speed = 100;
+    let laneCount = 3;
+    let carLane = 1; // This was used for car.lane, now directly using car.lane
+    let lanes = [];
+    
+
+    const car = {
+      lane: 1,
+      y: H * 0.75,
+      width: W*0.16,
+      height: H*0.14,
+      color: "#29b6f6"
+    };
+    let traffic = [];
+    let trafficSpawnTimer = 0;
+    const horizonY = H * 0.25; // Y-coordinate of the horizon
+
+    function reset() {
+      running = true;
+      score = 0;
+      speed = 100;
+      car.lane = 1;
+      traffic = [];
+      trafficSpawnTimer = 0;
+      document.getElementById('gameOver').classList.add('hidden');
+      document.getElementById('gameOver').style.top = canvas.offsetTop + 'px';
+      document.getElementById('gameOver').style.left = canvas.offsetLeft + 'px';
+      document.getElementById('gameOver').style.width = canvas.offsetWidth + 'px';
+      document.getElementById('gameOver').style.height = canvas.offsetHeight + 'px';
+      updateUI();
+    }
+
+    function drawRoad() {
+      // Sky
+      ctx.fillStyle = "#9ad1ff";
+      ctx.fillRect(0, 0, W, horizonY);
+
+      // Ground
+      ctx.fillStyle = "#888"; // Lighter grass/ground
+      ctx.fillRect(0, horizonY, W, H - horizonY);
+      
+      // Perspective road
+      ctx.save();
+      ctx.fillStyle = "#444"; // Road color
+      ctx.beginPath();
+      ctx.moveTo(W*0.05, H); // Bottom left of road
+      ctx.lineTo(W*0.95, H); // Bottom right of road
+      ctx.lineTo(W*0.65, horizonY); // Top right of road at horizon
+      ctx.lineTo(W*0.35, horizonY); // Top left of road at horizon
+      ctx.closePath();
+      ctx.fill();
+
+      // Lane lines
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = W * 0.01; // Scaled line width
+      
+      const lineSegmentLength = H * 0.05;
+      const lineGapLength = H * 0.04;
+      const totalSegmentLength = lineSegmentLength + lineGapLength;
+      
+      for(let i=1; i<laneCount; ++i){
+        ctx.beginPath();
+        // Calculate bottom x for this lane line
+        let x_bottom_factor = 0.05 + (0.90 / laneCount) * i;
+        // Calculate top x for this lane line (converging towards center)
+        // Center of the road at horizon is W*0.5
+        // Road width at horizon is W*0.3 (from W*0.35 to W*0.65)
+        let x_top_factor = 0.35 + (0.30 / laneCount) * i;
+
+        let currentY = H;
+        let segmentCount = 0;
+        while(currentY > horizonY) {
+            const y_progress = (H - currentY) / (H - horizonY); // 0 at bottom, 1 at horizon
+            const current_x = W * (x_bottom_factor * (1-y_progress) + x_top_factor * y_progress);
+            
+            const nextY = Math.max(horizonY, currentY - lineSegmentLength * (1 - y_progress * 0.7)); // Segments get shorter towards horizon
+            const next_x_progress = (H - nextY) / (H - horizonY);
+            const next_x = W * (x_bottom_factor * (1-next_x_progress) + x_top_factor * next_x_progress);
+            
+            if (segmentCount % 2 === 0) { // Draw segment
+                ctx.moveTo(current_x, currentY);
+                ctx.lineTo(next_x, nextY);
+            }
+            currentY = nextY - lineGapLength * (1 - y_progress * 0.7); // Gaps also get shorter
+            segmentCount++;
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    
+    function getPerspectiveScale(y) {
+        // Simple linear scaling: 0.5 at horizon, 1 at bottom of screen
+        // Adjust 0.5 (min_scale) and 1 (max_scale) as needed
+        const min_scale = 0.3;
+        const max_scale = 1.0;
+        const progress = (y - horizonY) / (H - horizonY); // 0 at horizon, 1 at H
+        return min_scale + (max_scale - min_scale) * progress;
+    }
+
+    function drawCar() {
+      const scale = getPerspectiveScale(car.y + car.height); // Scale based on car's base
+      const currentCarWidth = car.width * scale;
+      const currentCarHeight = car.height * scale;
+      const laneXCenter = lanes[car.lane];
+      const carX = laneXCenter - currentCarWidth / 2;
+      
+      ctx.save();
+      ctx.shadowColor = "#298abeAA";
+      ctx.shadowBlur = 12 * scale;
+      ctx.fillStyle = car.color;
+      ctx.fillRect(carX, car.y, currentCarWidth, currentCarHeight); // car.y is fixed, drawing from its top
+      ctx.shadowBlur = 0;
+
+      // windows
+      ctx.fillStyle = "#e0f7fa";
+      ctx.fillRect(carX + currentCarWidth*0.15, car.y + currentCarHeight*0.18, currentCarWidth*0.7, currentCarHeight*0.22);
+      // wheels (simplified, appear at bottom edge)
+      ctx.fillStyle = "#212121";
+      const wheelHeight = currentCarHeight*0.15;
+      const wheelWidth = currentCarWidth*0.22;
+      ctx.fillRect(carX - wheelWidth*0.2, car.y + currentCarHeight - wheelHeight, wheelWidth, wheelHeight); // Left wheel slightly out
+      ctx.fillRect(carX + currentCarWidth - wheelWidth*0.8, car.y + currentCarHeight - wheelHeight, wheelWidth, wheelHeight); // Right wheel slightly out
+      ctx.restore();
+    }
+
+    function drawTraffic() {
+      // Sort traffic by y position to draw farther cars first (painter's algorithm)
+      traffic.sort((a, b) => a.y - b.y);
+
+      for(const vehicle of traffic){
+        const scale = getPerspectiveScale(vehicle.y + vehicle.height);
+        const currentVehicleWidth = vehicle.width * scale;
+        const currentVehicleHeight = vehicle.height * scale;
+        const laneXCenter = lanes[vehicle.lane];
+        const vehicleX = laneXCenter - currentVehicleWidth / 2;
+        
+        // Don't draw if too far (or behind horizon effectively)
+        if (vehicle.y + currentVehicleHeight < horizonY) continue;
+
+        ctx.save();
+        ctx.shadowColor = "#00000033";
+        ctx.shadowBlur = 8 * scale;
+        ctx.fillStyle = vehicle.color;
+        ctx.fillRect(vehicleX, vehicle.y, currentVehicleWidth, currentVehicleHeight);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#fff8"; // Windshield
+        ctx.fillRect(vehicleX + currentVehicleWidth*0.18, vehicle.y + currentVehicleHeight*0.2, currentVehicleWidth*0.64, currentVehicleHeight*0.20);
+        ctx.restore();
+      }
+    }
+
+    function spawnTraffic() {
+      let spawnLane = Math.floor(Math.random()*laneCount);
+      const colors = ["#ff595e","#ffca3a","#8ac926","#1982c4","#6a4c93", "#f07167", "#0081a7", "#fed9b7"];
+      traffic.push({
+        lane: spawnLane,
+        y: horizonY - H*0.14, // Start just above horizon
+        width: W*0.16, // Base width
+        height: H*0.14, // Base height
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+
+    function moveTraffic(dt) {
+      for(let i = traffic.length - 1; i >= 0; i--){
+        let v = traffic[i];
+        v.y += speed*dt*0.6 * getPerspectiveScale(v.y + v.height); // Move faster if closer (larger scale)
+        
+        // If vehicle is past the player's car and still on screen, increment score
+        if (!v.scored && v.y > car.y + car.height) {
+            score += 10; // Or some other score value
+            v.scored = true; 
+            updateUI();
+        }
+      }
+      traffic = traffic.filter(v=>v.y < H + v.height*2); // Remove if well off screen bottom
+    }
+
+    function checkCollisions() {
+      for(const v of traffic){
+        if(v.lane === car.lane){
+          // Approximate collision check using y-overlap and considering perspective scaling
+          // Player car's effective collision box (bottom part)
+          const carBottomY = car.y + car.height;
+          const carTopY = car.y + car.height * 0.2; // Consider collision with front part
+
+          // Traffic car's effective collision box (bottom part)
+          const vScale = getPerspectiveScale(v.y + v.height);
+          const vCurrentHeight = v.height * vScale;
+          const vBottomY = v.y + vCurrentHeight;
+          const vTopY = v.y;
+
+          if(vBottomY > carTopY && vTopY < carBottomY){
+            // More precise check can be added if needed, e.g., x-overlap, but lane check helps
+            running = false;
+            setTimeout(()=>showGameOver(),200); // Faster game over
+          }
+        }
+      }
+    }
+
+    function showGameOver() {
+      document.getElementById('finalScore').textContent = score;
+      const gameOverDiv = document.getElementById('gameOver');
+      gameOverDiv.classList.remove('hidden');
+      gameOverDiv.style.top = canvas.offsetTop + 'px';
+      gameOverDiv.style.left = canvas.offsetLeft + 'px';
+      gameOverDiv.style.width = canvas.offsetWidth + 'px';
+      gameOverDiv.style.height = canvas.offsetHeight + 'px';
+    }
+
+    // UI
+    document.getElementById('scoreDisplay').textContent = score;
+    document.getElementById('speedDisplay').textContent = Math.floor(speed);
+
+    function updateUI() {
+      document.getElementById('scoreDisplay').textContent = score;
+      document.getElementById('speedDisplay').textContent = Math.floor(speed);
+    }
+
+    // Mobile Controls
+    document.getElementById('leftBtn').addEventListener('touchstart', e=>{
+      e.preventDefault(); // Prevent screen scroll
+      if(running && car.lane>0) car.lane--;
+    });
+    document.getElementById('rightBtn').addEventListener('touchstart', e=>{
+      e.preventDefault(); // Prevent screen scroll
+      if(running && car.lane < laneCount-1) car.lane++;
+    });
+    // Desktop keyboard
+    window.addEventListener('keydown', e=>{
+      if(!running && e.key !== "Enter" && e.key !== " ") return; // Allow restart on Enter/Space when game over
+      if(!running && (e.key === "Enter" || e.key === " ")) {
+          reset();
+          return;
+      }
+      if(e.key === "ArrowLeft" || e.key.toLowerCase() === "a") {
+        if(car.lane>0) car.lane--;
+      }
+      if(e.key === "ArrowRight" || e.key.toLowerCase() === "d"){
+        if(car.lane < laneCount-1) car.lane++;
+      }
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', ()=>{
+      reset();
+    });
+
+    // Main game loop
+    let lastTime = performance.now();
+
+    function gameLoop(now) {
+      let dt = Math.min(0.1, (now-lastTime)/1000); // Capped dt to prevent large jumps
+      lastTime = now;
+
+      ctx.clearRect(0,0,W,H);
+      drawRoad();
+      drawTraffic(); // Draw traffic before player car for correct layering if traffic can be "behind"
+      drawCar();
+
+      if(running){
+        // Score increases with speed/time, passing cars handled in moveTraffic
+        score += Math.floor(speed*dt*0.01); // Base score for survival
+        speed += dt*0.8; // Speed increases gradually
+        updateUI();
+
+        // Spawn traffic cars
+        trafficSpawnTimer -= dt;
+        if(trafficSpawnTimer <= 0){
+          spawnTraffic();
+          // More difficult as speed increases, ensure minimum spawn rate
+          trafficSpawnTimer = Math.max(0.45, 1.5 - speed/300);
+        }
+        moveTraffic(dt);
+        checkCollisions();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+    
+    setSize(); // Initial size and lane calculation
+    reset(); // Initial reset
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

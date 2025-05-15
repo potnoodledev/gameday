@@ -1,0 +1,46 @@
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+body {
+    font-family: 'Fredoka', 'Share Tech Mono', monospace;
+    background: #181a1b;
+    color: #fff;
+    width: 100vw;
+    height: 100vh;
+}
+.game-iframe {
+    width: 100vw;
+    height: 100vh;
+    border: none;
+    background: #111315;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+.leaderboard-overlay {
+    z-index: 50;
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    background: #23272aCC;
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 2px 12px #0007;
+    width: 90vw;
+    max-width: 320px;
+    min-width: 180px;
+}
+@media (max-width: 640px) {
+    .leaderboard-overlay {
+        display: none !important;
+    }
+}
+/* Mobile leaderboard sheet transparency */
+#leaderboardMobileSheet .bg-\[\#23272a\] {
+    background: #23272acc !important;
+} 
