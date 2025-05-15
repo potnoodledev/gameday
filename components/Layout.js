@@ -268,38 +268,104 @@ export default function Layout({ children, currentGameIdFromProp }) {
         const userMsgDiv = document.createElement('div');
         userMsgDiv.textContent = `You: ${message}`;
         llmChatHistory.appendChild(userMsgDiv);
+
+        // Create assistant message div and pre element for AI response
+        const assistantMsgDiv = document.createElement('div');
+        assistantMsgDiv.appendChild(document.createTextNode('AI: '));
+        const preElement = document.createElement('pre');
+        preElement.style.whiteSpace = 'pre-wrap';
+        preElement.style.wordWrap = 'break-word';
+        preElement.textContent = "generating code..."; // Initial placeholder message
+        assistantMsgDiv.appendChild(preElement);
+        llmChatHistory.appendChild(assistantMsgDiv);
+        llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Scroll to show placeholder
+
         try {
+            let accumulatedCode = ""; // Declare accumulatedCode at the top of the try block
+
             const response = await fetch('/api/generate-game-update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: message, model: model, currentCode: localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '' })
             });
-            if (!response.ok) throw new Error(`Server error: ${response.status}`);
-            const data = await response.json();
-            
-            const assistantMsgDiv = document.createElement('div');
-            assistantMsgDiv.appendChild(document.createTextNode('AI: ')); // Add "AI: " prefix as text
-            const preElement = document.createElement('pre');
-            preElement.style.whiteSpace = 'pre-wrap';
-            preElement.style.wordWrap = 'break-word';
-            preElement.textContent = data.newCode || data.error || 'No response'; // Use textContent to display code as text
-            assistantMsgDiv.appendChild(preElement);
-            llmChatHistory.appendChild(assistantMsgDiv);
-            
-            llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
-            if (data.newCode) {
-                // Update preview iframe in the modal
-                if (liveGamePreviewRef.current) {
-                     liveGamePreviewRef.current.srcdoc = data.newCode;
-                }
-                localStorage.setItem(LIVE_GAME_DRAFT_KEY, data.newCode);
+
+            if (!response.ok) {
+                // Try to get error message from body if server sent one
+                const errorData = await response.json().catch(() => ({ message: `Server error: ${response.status}` }));
+                throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
             }
+            
+            const contentType = response.headers.get("Content-Type");
+
+            if (contentType && contentType.includes("text/plain")) { // Gemini or OpenAI streams plain text
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                preElement.textContent = ""; // Clear placeholder for streaming content
+                let firstChunk = true;
+
+                // eslint-disable-next-line no-constant-condition
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunkText = decoder.decode(value); 
+                    if (firstChunk) {
+                        // preElement.textContent = chunkText; // Overwrite if it was a placeholder
+                        firstChunk = false;
+                    } // Not strictly needed as we cleared above, but good for clarity if clearing was conditional
+                    preElement.textContent += chunkText; 
+                    accumulatedCode += chunkText;
+                    llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Keep scrolling
+                }
+            } else if (contentType && contentType.includes("application/json")) { // Fallback or non-streamed JSON
+                const data = await response.json();
+                if (data.newCode) {
+                    preElement.textContent = data.newCode; // Replace placeholder
+                    accumulatedCode = data.newCode;
+                } else if (data.error) {
+                    preElement.textContent = data.error; // Replace placeholder with error
+                    throw new Error(data.error);
+                } else {
+                    preElement.textContent = 'No response content from AI (JSON).'; // Replace placeholder
+                    throw new Error('No response content from AI (JSON).');
+                }
+            } else {
+                // Fallback for unexpected content type
+                const textResponse = await response.text();
+                preElement.textContent = `Unexpected response type: ${contentType}\n${textResponse}`; // Replace placeholder
+                throw new Error(`Unexpected response type: ${contentType}`);
+            }
+            
+            llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Final scroll
+
+            // Process accumulatedCode for preview and storage (only if content was generated)
+            if (accumulatedCode.trim()) {
+                // Clean the accumulated code once (remove ```html markers)
+                const finalCode = accumulatedCode.replace(/^```html\s*/, '').replace(/```$/, '').trim();
+                
+                if (finalCode) { // Ensure finalCode is not empty after stripping
+                    if (liveGamePreviewRef.current) {
+                        liveGamePreviewRef.current.srcdoc = finalCode;
+                    }
+                    localStorage.setItem(LIVE_GAME_DRAFT_KEY, finalCode);
+                }
+            } else if (!preElement.textContent.toLowerCase().includes('error')) {
+                 // If accumulatedCode is empty but no explicit error was shown in preElement
+                 preElement.textContent += (preElement.textContent ? '\n' : '') + "(AI generated empty content)";
+            }
+
         } catch (error) {
             console.error('Error calling LLM API:', error);
-            const errorMsgDiv = document.createElement('div');
-            errorMsgDiv.textContent = `Error: ${error.message}`;
-            errorMsgDiv.style.color = 'red';
-            llmChatHistory.appendChild(errorMsgDiv);
+            // Ensure the preElement (which might say "generating code...") is updated with the error
+            if (preElement) { // preElement should exist if we got this far
+                preElement.textContent = `Error: ${error.message}`;
+                preElement.style.color = 'red'; // Make error more visible
+            } else { // Fallback if preElement wasn't created (shouldn't happen)
+                const errorMsgDiv = document.createElement('div');
+                errorMsgDiv.textContent = `Error: ${error.message}`;
+                errorMsgDiv.style.color = 'red';
+                llmChatHistory.appendChild(errorMsgDiv);
+            }
+            llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
         }
     };
 
