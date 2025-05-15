@@ -276,9 +276,16 @@ export default function Layout({ children, currentGameIdFromProp }) {
             });
             if (!response.ok) throw new Error(`Server error: ${response.status}`);
             const data = await response.json();
+            
             const assistantMsgDiv = document.createElement('div');
-            assistantMsgDiv.innerHTML = `AI: <pre style="white-space: pre-wrap; word-wrap: break-word;">${data.newCode || data.error || 'No response'}</pre>`;
+            assistantMsgDiv.appendChild(document.createTextNode('AI: ')); // Add "AI: " prefix as text
+            const preElement = document.createElement('pre');
+            preElement.style.whiteSpace = 'pre-wrap';
+            preElement.style.wordWrap = 'break-word';
+            preElement.textContent = data.newCode || data.error || 'No response'; // Use textContent to display code as text
+            assistantMsgDiv.appendChild(preElement);
             llmChatHistory.appendChild(assistantMsgDiv);
+            
             llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
             if (data.newCode) {
                 // Update preview iframe in the modal
@@ -286,11 +293,6 @@ export default function Layout({ children, currentGameIdFromProp }) {
                      liveGamePreviewRef.current.srcdoc = data.newCode;
                 }
                 localStorage.setItem(LIVE_GAME_DRAFT_KEY, data.newCode);
-
-                // Additionally, update the main game iframe if it's the live game
-                if (gameFrameRef.current && currentGame && currentGame.id === 'livegame') {
-                    gameFrameRef.current.srcdoc = data.newCode;
-                }
             }
         } catch (error) {
             console.error('Error calling LLM API:', error);

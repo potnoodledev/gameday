@@ -1,362 +1,347 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>3D Driving Game</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; }
-    #gameCanvas { width: 100% !important; height: 320px !important; background: #9ad1ff; border-radius: 0.75rem; touch-action: none; }
-    @media (min-width: 640px) {
-      #gameCanvas { height: 480px !important; }
-    }
-    .btn { background: linear-gradient(90deg,#60a5fa,#34d399); color:white; font-weight:600; }
-    .btn:active { background: #34d399; }
-  </style>
+    <meta charset="UTF-8">
+    <title>3D Racer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto:wght@400&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        #gameCanvas { display: block; width: 100%; height: 100%; }
+        .touch-button {
+            touch-action: manipulation; /* Prevents double tap zoom etc. */
+            user-select: none; /* Prevents text selection */
+            -webkit-user-select: none;
+        }
+    </style>
 </head>
-<body class="bg-blue-100 min-h-screen flex flex-col">
-  <header class="p-4 bg-gradient-to-r from-blue-400 to-blue-600 text-white shadow-lg rounded-b-md">
-    <h1 class="text-2xl font-bold text-center">3D Driving Game</h1>
-    <p class="text-sm text-center mt-1">Race down the endless highway. Dodge traffic. Score high!</p>
-  </header>
-  <main class="flex-1 flex flex-col items-center justify-start mt-4 px-2">
-    <div class="w-full max-w-xl flex flex-col gap-3">
-      <div class="flex justify-between bg-white rounded-xl shadow px-4 py-2 mb-1">
-        <div>
-          <span class="text-xs text-gray-500">Score</span>
-          <div class="font-bold text-lg text-blue-600" id="scoreDisplay">0</div>
-        </div>
-        <div>
-          <span class="text-xs text-gray-500">Speed</span>
-          <div class="font-bold text-lg text-emerald-600" id="speedDisplay">100</div>
-        </div>
-      </div>
-      <canvas id="gameCanvas" class="mb-2"></canvas>
-      <div class="flex flex-row justify-center items-center gap-4 sm:hidden">
-        <button id="leftBtn" class="btn rounded-full w-16 h-16 text-2xl flex items-center justify-center shadow">⟵</button>
-        <button id="rightBtn" class="btn rounded-full w-16 h-16 text-2xl flex items-center justify-center shadow">⟶</button>
-      </div>
-      <div id="gameOver" class="hidden flex flex-col items-center justify-center absolute top-0 left-0 w-full h-full bg-black/50">
-        <div class="bg-white/90 p-6 rounded-lg shadow-lg text-center">
-          <h2 class="text-2xl font-bold text-red-600 mb-2">Game Over!</h2>
-          <div class="mb-2 text-lg">Final Score: <span id="finalScore" class="font-bold"></span></div>
-          <button id="restartBtn" class="btn px-6 py-2 rounded-md mt-2">Restart</button>
-        </div>
-      </div>
+<body class="bg-gray-800 text-white overflow-hidden">
+
+    <div id="gameContainer" class="absolute inset-0 z-0">
+        <!-- Canvas will be appended here by Three.js -->
     </div>
-  </main>
-  <script type="module">
-    // Setup
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    let W = 320, H = 320;
 
-    function setSize() {
-      const bcr = canvas.getBoundingClientRect();
-      W = Math.round(bcr.width);
-      H = Math.round(bcr.height);
-      canvas.width = W; canvas.height = H;
-      // Re-calculate lanes based on new width
-      for(let i=0; i<laneCount; ++i) {
-        lanes[i] = W * (0.2 + 0.3 * i);
-      }
-      car.width = W*0.16;
-      car.height = H*0.14;
-      car.y = H * 0.75;
-    }
-    
-    window.addEventListener('resize', setSize);
+    <header class="absolute top-0 left-0 right-0 p-3 z-10 bg-black/40 backdrop-blur-sm">
+        <h1 class="text-xl md:text-2xl orbitron text-center text-cyan-400 tracking-wider">Vector Racer 3D</h1>
+    </header>
 
-    // Game vars
-    let running = true;
-    let score = 0;
-    let speed = 100;
-    let laneCount = 3;
-    let carLane = 1; // This was used for car.lane, now directly using car.lane
-    let lanes = [];
-    
+    <div id="uiContainer" class="absolute bottom-0 left-0 right-0 p-2 pb-3 md:p-4 z-10 bg-black/40 backdrop-blur-sm flex flex-col items-center">
+        <div id="speedDisplay" class="text-lg md:text-xl orbitron mb-2 text-yellow-400">Speed: 0 KM/H</div>
+        <div id="instructions" class="text-xs md:text-sm text-center text-gray-300 mb-2 px-2">
+            Controls: [W/↑] Accel, [S/↓] Brake/Reverse, [A/←] Left, [D/→] Right
+        </div>
+        <!-- Touch Controls for Mobile -->
+        <div id="touchControlsContainer" class="w-full md:hidden">
+            <div id="touchControls" class="grid grid-cols-3 gap-2 w-full max-w-sm mx-auto px-2">
+                <div></div> <!-- Spacer -->
+                <button id="gasButton" class="touch-button bg-green-500/80 hover:bg-green-600/80 text-white font-bold py-3 rounded active:bg-green-700/80 text-2xl">▲</button>
+                <div></div> <!-- Spacer -->
+                <button id="leftButton" class="touch-button bg-blue-500/80 hover:bg-blue-600/80 text-white font-bold py-3 rounded active:bg-blue-700/80 text-2xl">◄</button>
+                <button id="brakeButton" class="touch-button bg-red-500/80 hover:bg-red-600/80 text-white font-bold py-3 rounded active:bg-red-700/80 text-2xl">▼</button>
+                <button id="rightButton" class="touch-button bg-blue-500/80 hover:bg-blue-600/80 text-white font-bold py-3 rounded active:bg-blue-700/80 text-2xl">►</button>
+            </div>
+        </div>
+    </div>
 
-    const car = {
-      lane: 1,
-      y: H * 0.75,
-      width: W*0.16,
-      height: H*0.14,
-      color: "#29b6f6"
-    };
-    let traffic = [];
-    let trafficSpawnTimer = 0;
-    const horizonY = H * 0.25; // Y-coordinate of the horizon
+    <div id="loadingScreen" class="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center z-50">
+        <div class="text-3xl orbitron text-cyan-400 animate-pulse">LOADING</div>
+        <div class="text-gray-400 mt-2">Please wait...</div>
+    </div>
 
-    function reset() {
-      running = true;
-      score = 0;
-      speed = 100;
-      car.lane = 1;
-      traffic = [];
-      trafficSpawnTimer = 0;
-      document.getElementById('gameOver').classList.add('hidden');
-      document.getElementById('gameOver').style.top = canvas.offsetTop + 'px';
-      document.getElementById('gameOver').style.left = canvas.offsetLeft + 'px';
-      document.getElementById('gameOver').style.width = canvas.offsetWidth + 'px';
-      document.getElementById('gameOver').style.height = canvas.offsetHeight + 'px';
-      updateUI();
-    }
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-    function drawRoad() {
-      // Sky
-      ctx.fillStyle = "#9ad1ff";
-      ctx.fillRect(0, 0, W, horizonY);
+        let scene, camera, renderer, clock;
+        let playerCar, carSpeed = 0;
+        const keysPressed = {};
 
-      // Ground
-      ctx.fillStyle = "#888"; // Lighter grass/ground
-      ctx.fillRect(0, horizonY, W, H - horizonY);
-      
-      // Perspective road
-      ctx.save();
-      ctx.fillStyle = "#444"; // Road color
-      ctx.beginPath();
-      ctx.moveTo(W*0.05, H); // Bottom left of road
-      ctx.lineTo(W*0.95, H); // Bottom right of road
-      ctx.lineTo(W*0.65, horizonY); // Top right of road at horizon
-      ctx.lineTo(W*0.35, horizonY); // Top left of road at horizon
-      ctx.closePath();
-      ctx.fill();
+        const gameContainer = document.getElementById('gameContainer');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const loadingScreen = document.getElementById('loadingScreen');
+        
+        // Car physics parameters (tuned for deltaTime)
+        const CAR_PROPS = {
+            maxSpeed: 35, // units per second
+            acceleration: 20, // units per second^2
+            brakingForce: 50, // units per second^2
+            reverseMaxSpeed: -10,
+            reverseAcceleration: 10,
+            friction: 2.5, // Frictional deceleration factor (force = speed * friction)
+            steeringAngularVelocity: Math.PI * 0.6, // Radians per second for car body rotation
+            bodyDimensions: { width: 1.7, height: 0.8, length: 3.8 },
+            wheelRadius: 0.4,
+            wheelWidth: 0.3,
+        };
 
-      // Lane lines
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = W * 0.01; // Scaled line width
-      
-      const lineSegmentLength = H * 0.05;
-      const lineGapLength = H * 0.04;
-      const totalSegmentLength = lineSegmentLength + lineGapLength;
-      
-      for(let i=1; i<laneCount; ++i){
-        ctx.beginPath();
-        // Calculate bottom x for this lane line
-        let x_bottom_factor = 0.05 + (0.90 / laneCount) * i;
-        // Calculate top x for this lane line (converging towards center)
-        // Center of the road at horizon is W*0.5
-        // Road width at horizon is W*0.3 (from W*0.35 to W*0.65)
-        let x_top_factor = 0.35 + (0.30 / laneCount) * i;
+        const TRACK_PROPS = {
+            width: 20,
+            length: 400, // A long straight track
+            wallHeight: 2,
+            wallThickness: 1,
+        };
+        const cameraOffset = new THREE.Vector3(0, 5, -9); // Behind and above car
+        let wheels = [];
 
-        let currentY = H;
-        let segmentCount = 0;
-        while(currentY > horizonY) {
-            const y_progress = (H - currentY) / (H - horizonY); // 0 at bottom, 1 at horizon
-            const current_x = W * (x_bottom_factor * (1-y_progress) + x_top_factor * y_progress);
+
+        function init() {
+            clock = new THREE.Clock();
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x60A5FA); // Sky blue
+            scene.fog = new THREE.Fog(0x60A5FA, 50, 200);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, gameContainer.clientWidth / gameContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0, 10, -15); // Initial camera position
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(gameContainer.clientWidth, gameContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            gameContainer.appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(20, 30, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            const shadowCamSize = 40;
+            directionalLight.shadow.camera.left = -shadowCamSize;
+            directionalLight.shadow.camera.right = shadowCamSize;
+            directionalLight.shadow.camera.top = shadowCamSize;
+            directionalLight.shadow.camera.bottom = -shadowCamSize;
+            directionalLight.shadow.camera.near = 1;
+            directionalLight.shadow.camera.far = 100;
+            scene.add(directionalLight);
+
+
+            createTrack();
+            createCar();
+            setupControls();
+
+            window.addEventListener('resize', onWindowResize);
             
-            const nextY = Math.max(horizonY, currentY - lineSegmentLength * (1 - y_progress * 0.7)); // Segments get shorter towards horizon
-            const next_x_progress = (H - nextY) / (H - horizonY);
-            const next_x = W * (x_bottom_factor * (1-next_x_progress) + x_top_factor * next_x_progress);
+            loadingScreen.style.display = 'none';
+            document.body.classList.add('game-active');
+            animate();
+        }
+
+        function createCar() {
+            playerCar = new THREE.Group();
+            playerCar.position.set(0, CAR_PROPS.wheelRadius, -TRACK_PROPS.length / 2 + 20); // Start near one end
+            playerCar.rotation.y = 0; // Facing positive Z
+
+            // Car Body
+            const bodyGeo = new THREE.BoxGeometry(CAR_PROPS.bodyDimensions.width, CAR_PROPS.bodyDimensions.height, CAR_PROPS.bodyDimensions.length);
+            const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff3333, flatShading: false });
+            const carBody = new THREE.Mesh(bodyGeo, bodyMat);
+            carBody.position.y = CAR_PROPS.bodyDimensions.height / 2; // Body is on top of wheels
+            carBody.castShadow = true;
+            carBody.receiveShadow = true;
+            playerCar.add(carBody);
             
-            if (segmentCount % 2 === 0) { // Draw segment
-                ctx.moveTo(current_x, currentY);
-                ctx.lineTo(next_x, nextY);
+            // Car Windshield (simple)
+            const windshieldGeo = new THREE.BoxGeometry(CAR_PROPS.bodyDimensions.width * 0.9, CAR_PROPS.bodyDimensions.height * 0.6, CAR_PROPS.bodyDimensions.length * 0.02);
+            const windshieldMat = new THREE.MeshPhongMaterial({ color: 0x60A5FA, transparent: true, opacity: 0.5 });
+            const windshield = new THREE.Mesh(windshieldGeo, windshieldMat);
+            windshield.position.set(0, CAR_PROPS.bodyDimensions.height / 2 + CAR_PROPS.bodyDimensions.height*0.1, CAR_PROPS.bodyDimensions.length/2 * 0.4);
+            windshield.rotation.x = -Math.PI / 12;
+            playerCar.add(windshield);
+
+
+            // Wheels
+            const wheelGeo = new THREE.CylinderGeometry(CAR_PROPS.wheelRadius, CAR_PROPS.wheelRadius, CAR_PROPS.wheelWidth, 24);
+            const wheelMat = new THREE.MeshPhongMaterial({ color: 0x222222, flatShading: false });
+            
+            const wheelPositions = [
+                { x: -CAR_PROPS.bodyDimensions.width/2, y: 0, z: CAR_PROPS.bodyDimensions.length/2 * 0.7, front: true },  // Front Left
+                { x:  CAR_PROPS.bodyDimensions.width/2, y: 0, z: CAR_PROPS.bodyDimensions.length/2 * 0.7, front: true },  // Front Right
+                { x: -CAR_PROPS.bodyDimensions.width/2, y: 0, z: -CAR_PROPS.bodyDimensions.length/2 * 0.7, front: false }, // Rear Left
+                { x:  CAR_PROPS.bodyDimensions.width/2, y: 0, z: -CAR_PROPS.bodyDimensions.length/2 * 0.7, front: false }  // Rear Right
+            ];
+
+            wheelPositions.forEach(posData => {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2; // Align cylinder axis to be axle
+                wheel.position.set(posData.x, posData.y, posData.z);
+                wheel.castShadow = true;
+                playerCar.add(wheel);
+                wheels.push({mesh: wheel, isFront: posData.front});
+            });
+            scene.add(playerCar);
+        }
+
+        function createTrack() {
+            // Ground
+            const groundTexture = new THREE.TextureLoader().load('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAAAUElEQVR4Ae3ZUQ0AIAADsM7/o20KExgcBPoDyOASESIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiItLXAdK8Aj3hPSfWAAAAAElFTkSuQmCC'); // Simple 64x64 grey texture
+            groundTexture.wrapS = THREE.RepeatWrapping;
+            groundTexture.wrapT = THREE.RepeatWrapping;
+            groundTexture.repeat.set(TRACK_PROPS.width / 4, TRACK_PROPS.length / 4); // Adjust repeat based on texture size and plane size
+            
+            const groundMaterial = new THREE.MeshPhongMaterial({ map: groundTexture, color: 0x666666 });
+            const groundGeometry = new THREE.PlaneGeometry(TRACK_PROPS.width, TRACK_PROPS.length);
+            const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.receiveShadow = true;
+            scene.add(groundMesh);
+
+            // Walls
+            const wallMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+            const wallLeftGeo = new THREE.BoxGeometry(TRACK_PROPS.wallThickness, TRACK_PROPS.wallHeight, TRACK_PROPS.length);
+            const wallLeft = new THREE.Mesh(wallLeftGeo, wallMaterial);
+            wallLeft.position.set(-(TRACK_PROPS.width / 2) - (TRACK_PROPS.wallThickness / 2), TRACK_PROPS.wallHeight / 2, 0);
+            wallLeft.castShadow = true;
+            wallLeft.receiveShadow = true;
+            scene.add(wallLeft);
+
+            const wallRight = new THREE.Mesh(wallLeftGeo, wallMaterial); // Reuse geometry
+            wallRight.position.set((TRACK_PROPS.width / 2) + (TRACK_PROPS.wallThickness / 2), TRACK_PROPS.wallHeight / 2, 0);
+            wallRight.castShadow = true;
+            wallRight.receiveShadow = true;
+            scene.add(wallRight);
+        }
+
+        function setupControls() {
+            document.addEventListener('keydown', (event) => { keysPressed[event.key.toLowerCase()] = true; keysPressed[event.code] = true;});
+            document.addEventListener('keyup', (event) => { keysPressed[event.key.toLowerCase()] = false; keysPressed[event.code] = false;});
+
+            // Touch Controls
+            const gasButton = document.getElementById('gasButton');
+            const brakeButton = document.getElementById('brakeButton');
+            const leftButton = document.getElementById('leftButton');
+            const rightButton = document.getElementById('rightButton');
+
+            const setupTouchButton = (button, key) => {
+                button.addEventListener('pointerdown', (e) => { e.preventDefault(); keysPressed[key] = true; }, {passive: false});
+                button.addEventListener('pointerup', (e) => { e.preventDefault(); keysPressed[key] = false; }, {passive: false});
+                button.addEventListener('pointerleave', (e) => { if(e.pointerType !== "touch") keysPressed[key] = false; }); // Keep pressed if finger slides off then back on for touch
+            };
+            
+            if (gasButton) setupTouchButton(gasButton, 'w');
+            if (brakeButton) setupTouchButton(brakeButton, 's');
+            if (leftButton) setupTouchButton(leftButton, 'a');
+            if (rightButton) setupTouchButton(rightButton, 'd');
+        }
+
+        function updateCar(deltaTime) {
+            let acl = 0;
+            let turnDirection = 0;
+
+            // Acceleration/Braking
+            if (keysPressed['w'] || keysPressed['ArrowUp']) {
+                acl = CAR_PROPS.acceleration;
             }
-            currentY = nextY - lineGapLength * (1 - y_progress * 0.7); // Gaps also get shorter
-            segmentCount++;
+            if (keysPressed['s'] || keysPressed['ArrowDown']) {
+                if (carSpeed > 0.1) acl = -CAR_PROPS.brakingForce; // Braking
+                else acl = -CAR_PROPS.reverseAcceleration; // Reversing
+            }
+
+            carSpeed += acl * deltaTime;
+
+            // Friction
+            let frictionForce = Math.sign(carSpeed) * CAR_PROPS.friction * Math.abs(carSpeed) * deltaTime; // Simplified quadratic drag
+            if (acl === 0) { // Stronger friction if no input
+                 frictionForce *= 2;
+            }
+            if (Math.abs(carSpeed) > Math.abs(frictionForce)) {
+                 carSpeed -= frictionForce;
+            } else {
+                 carSpeed = 0;
+            }
+            
+            carSpeed = Math.max(CAR_PROPS.reverseMaxSpeed, Math.min(CAR_PROPS.maxSpeed, carSpeed));
+             if (Math.abs(carSpeed) < 0.01 && acl === 0) carSpeed = 0;
+
+
+            // Steering
+            if (keysPressed['a'] || keysPressed['ArrowLeft']) turnDirection = 1;
+            if (keysPressed['d'] || keysPressed['ArrowRight']) turnDirection = -1;
+
+            if (Math.abs(carSpeed) > 0.1) { // Only allow steering if moving
+                const steeringAmount = turnDirection * CAR_PROPS.steeringAngularVelocity * deltaTime;
+                playerCar.rotateY(steeringAmount * (carSpeed >=0 ? 1 : -1)); // Invert steer when reversing
+            }
+            
+            // Update car position
+            const moveDirection = new THREE.Vector3(0, 0, 1); // Car's local forward
+            moveDirection.applyQuaternion(playerCar.quaternion);
+            const moveVector = moveDirection.multiplyScalar(carSpeed * deltaTime);
+            playerCar.position.add(moveVector);
+
+            // Collision with track boundaries
+            const carHalfWidth = CAR_PROPS.bodyDimensions.width / 2 * Math.abs(Math.cos(playerCar.rotation.y)) + CAR_PROPS.bodyDimensions.length / 2 * Math.abs(Math.sin(playerCar.rotation.y));
+            const carHalfLength = CAR_PROPS.bodyDimensions.length / 2 * Math.abs(Math.cos(playerCar.rotation.y)) + CAR_PROPS.bodyDimensions.width / 2 * Math.abs(Math.sin(playerCar.rotation.y));
+            
+            const trackEdgeX = TRACK_PROPS.width / 2 - carHalfWidth * 0.8; // 0.8 fudge factor for tighter feel
+            const trackEdgeZ = TRACK_PROPS.length / 2 - carHalfLength;
+
+            if (playerCar.position.x > trackEdgeX) {
+                playerCar.position.x = trackEdgeX;
+                carSpeed *= -0.3; // Bounce
+            }
+            if (playerCar.position.x < -trackEdgeX) {
+                playerCar.position.x = -trackEdgeX;
+                carSpeed *= -0.3; // Bounce
+            }
+            if (playerCar.position.z > trackEdgeZ) {
+                playerCar.position.z = trackEdgeZ;
+                carSpeed *= -0.3; // Bounce
+            }
+            if (playerCar.position.z < -trackEdgeZ) {
+                playerCar.position.z = -trackEdgeZ;
+                carSpeed *= -0.3; // Bounce
+            }
+
+            // Animate wheels
+            const wheelRotationSpeed = carSpeed / CAR_PROPS.wheelRadius * deltaTime;
+            wheels.forEach(wheelData => {
+                wheelData.mesh.rotation.x -= wheelRotationSpeed; // Assuming cylinder axis along world X after initial rotation
+                // Front wheel steering animation (visual only)
+                if (wheelData.isFront) {
+                    wheelData.mesh.rotation.y = turnDirection * Math.PI / 8 * Math.min(1, Math.abs(carSpeed)/5); // Steer angle based on input and speed
+                }
+            });
         }
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    
-    function getPerspectiveScale(y) {
-        // Simple linear scaling: 0.5 at horizon, 1 at bottom of screen
-        // Adjust 0.5 (min_scale) and 1 (max_scale) as needed
-        const min_scale = 0.3;
-        const max_scale = 1.0;
-        const progress = (y - horizonY) / (H - horizonY); // 0 at horizon, 1 at H
-        return min_scale + (max_scale - min_scale) * progress;
-    }
 
-    function drawCar() {
-      const scale = getPerspectiveScale(car.y + car.height); // Scale based on car's base
-      const currentCarWidth = car.width * scale;
-      const currentCarHeight = car.height * scale;
-      const laneXCenter = lanes[car.lane];
-      const carX = laneXCenter - currentCarWidth / 2;
-      
-      ctx.save();
-      ctx.shadowColor = "#298abeAA";
-      ctx.shadowBlur = 12 * scale;
-      ctx.fillStyle = car.color;
-      ctx.fillRect(carX, car.y, currentCarWidth, currentCarHeight); // car.y is fixed, drawing from its top
-      ctx.shadowBlur = 0;
+        function updateCamera() {
+            const carPosition = new THREE.Vector3();
+            playerCar.getWorldPosition(carPosition);
 
-      // windows
-      ctx.fillStyle = "#e0f7fa";
-      ctx.fillRect(carX + currentCarWidth*0.15, car.y + currentCarHeight*0.18, currentCarWidth*0.7, currentCarHeight*0.22);
-      // wheels (simplified, appear at bottom edge)
-      ctx.fillStyle = "#212121";
-      const wheelHeight = currentCarHeight*0.15;
-      const wheelWidth = currentCarWidth*0.22;
-      ctx.fillRect(carX - wheelWidth*0.2, car.y + currentCarHeight - wheelHeight, wheelWidth, wheelHeight); // Left wheel slightly out
-      ctx.fillRect(carX + currentCarWidth - wheelWidth*0.8, car.y + currentCarHeight - wheelHeight, wheelWidth, wheelHeight); // Right wheel slightly out
-      ctx.restore();
-    }
-
-    function drawTraffic() {
-      // Sort traffic by y position to draw farther cars first (painter's algorithm)
-      traffic.sort((a, b) => a.y - b.y);
-
-      for(const vehicle of traffic){
-        const scale = getPerspectiveScale(vehicle.y + vehicle.height);
-        const currentVehicleWidth = vehicle.width * scale;
-        const currentVehicleHeight = vehicle.height * scale;
-        const laneXCenter = lanes[vehicle.lane];
-        const vehicleX = laneXCenter - currentVehicleWidth / 2;
-        
-        // Don't draw if too far (or behind horizon effectively)
-        if (vehicle.y + currentVehicleHeight < horizonY) continue;
-
-        ctx.save();
-        ctx.shadowColor = "#00000033";
-        ctx.shadowBlur = 8 * scale;
-        ctx.fillStyle = vehicle.color;
-        ctx.fillRect(vehicleX, vehicle.y, currentVehicleWidth, currentVehicleHeight);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "#fff8"; // Windshield
-        ctx.fillRect(vehicleX + currentVehicleWidth*0.18, vehicle.y + currentVehicleHeight*0.2, currentVehicleWidth*0.64, currentVehicleHeight*0.20);
-        ctx.restore();
-      }
-    }
-
-    function spawnTraffic() {
-      let spawnLane = Math.floor(Math.random()*laneCount);
-      const colors = ["#ff595e","#ffca3a","#8ac926","#1982c4","#6a4c93", "#f07167", "#0081a7", "#fed9b7"];
-      traffic.push({
-        lane: spawnLane,
-        y: horizonY - H*0.14, // Start just above horizon
-        width: W*0.16, // Base width
-        height: H*0.14, // Base height
-        color: colors[Math.floor(Math.random() * colors.length)]
-      });
-    }
-
-    function moveTraffic(dt) {
-      for(let i = traffic.length - 1; i >= 0; i--){
-        let v = traffic[i];
-        v.y += speed*dt*0.6 * getPerspectiveScale(v.y + v.height); // Move faster if closer (larger scale)
-        
-        // If vehicle is past the player's car and still on screen, increment score
-        if (!v.scored && v.y > car.y + car.height) {
-            score += 10; // Or some other score value
-            v.scored = true; 
-            updateUI();
+            const targetCameraPosition = carPosition.clone().add(
+                cameraOffset.clone().applyQuaternion(playerCar.quaternion)
+            );
+            camera.position.lerp(targetCameraPosition, 0.08); // Smooth transition
+            camera.lookAt(carPosition.add(new THREE.Vector3(0,1,0))); // Look slightly above car center
         }
-      }
-      traffic = traffic.filter(v=>v.y < H + v.height*2); // Remove if well off screen bottom
-    }
 
-    function checkCollisions() {
-      for(const v of traffic){
-        if(v.lane === car.lane){
-          // Approximate collision check using y-overlap and considering perspective scaling
-          // Player car's effective collision box (bottom part)
-          const carBottomY = car.y + car.height;
-          const carTopY = car.y + car.height * 0.2; // Consider collision with front part
+        function animate() {
+            requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
 
-          // Traffic car's effective collision box (bottom part)
-          const vScale = getPerspectiveScale(v.y + v.height);
-          const vCurrentHeight = v.height * vScale;
-          const vBottomY = v.y + vCurrentHeight;
-          const vTopY = v.y;
+            updateCar(deltaTime);
+            updateCamera();
+            
+            speedDisplay.textContent = `Speed: ${Math.abs(Math.round(carSpeed * 3.6))} KM/H`; // unit/s to km/h approx
 
-          if(vBottomY > carTopY && vTopY < carBottomY){
-            // More precise check can be added if needed, e.g., x-overlap, but lane check helps
-            running = false;
-            setTimeout(()=>showGameOver(),200); // Faster game over
-          }
+            renderer.render(scene, camera);
         }
-      }
-    }
 
-    function showGameOver() {
-      document.getElementById('finalScore').textContent = score;
-      const gameOverDiv = document.getElementById('gameOver');
-      gameOverDiv.classList.remove('hidden');
-      gameOverDiv.style.top = canvas.offsetTop + 'px';
-      gameOverDiv.style.left = canvas.offsetLeft + 'px';
-      gameOverDiv.style.width = canvas.offsetWidth + 'px';
-      gameOverDiv.style.height = canvas.offsetHeight + 'px';
-    }
-
-    // UI
-    document.getElementById('scoreDisplay').textContent = score;
-    document.getElementById('speedDisplay').textContent = Math.floor(speed);
-
-    function updateUI() {
-      document.getElementById('scoreDisplay').textContent = score;
-      document.getElementById('speedDisplay').textContent = Math.floor(speed);
-    }
-
-    // Mobile Controls
-    document.getElementById('leftBtn').addEventListener('touchstart', e=>{
-      e.preventDefault(); // Prevent screen scroll
-      if(running && car.lane>0) car.lane--;
-    });
-    document.getElementById('rightBtn').addEventListener('touchstart', e=>{
-      e.preventDefault(); // Prevent screen scroll
-      if(running && car.lane < laneCount-1) car.lane++;
-    });
-    // Desktop keyboard
-    window.addEventListener('keydown', e=>{
-      if(!running && e.key !== "Enter" && e.key !== " ") return; // Allow restart on Enter/Space when game over
-      if(!running && (e.key === "Enter" || e.key === " ")) {
-          reset();
-          return;
-      }
-      if(e.key === "ArrowLeft" || e.key.toLowerCase() === "a") {
-        if(car.lane>0) car.lane--;
-      }
-      if(e.key === "ArrowRight" || e.key.toLowerCase() === "d"){
-        if(car.lane < laneCount-1) car.lane++;
-      }
-    });
-
-    document.getElementById('restartBtn').addEventListener('click', ()=>{
-      reset();
-    });
-
-    // Main game loop
-    let lastTime = performance.now();
-
-    function gameLoop(now) {
-      let dt = Math.min(0.1, (now-lastTime)/1000); // Capped dt to prevent large jumps
-      lastTime = now;
-
-      ctx.clearRect(0,0,W,H);
-      drawRoad();
-      drawTraffic(); // Draw traffic before player car for correct layering if traffic can be "behind"
-      drawCar();
-
-      if(running){
-        // Score increases with speed/time, passing cars handled in moveTraffic
-        score += Math.floor(speed*dt*0.01); // Base score for survival
-        speed += dt*0.8; // Speed increases gradually
-        updateUI();
-
-        // Spawn traffic cars
-        trafficSpawnTimer -= dt;
-        if(trafficSpawnTimer <= 0){
-          spawnTraffic();
-          // More difficult as speed increases, ensure minimum spawn rate
-          trafficSpawnTimer = Math.max(0.45, 1.5 - speed/300);
+        function onWindowResize() {
+            camera.aspect = gameContainer.clientWidth / gameContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(gameContainer.clientWidth, gameContainer.clientHeight);
         }
-        moveTraffic(dt);
-        checkCollisions();
-      }
-      requestAnimationFrame(gameLoop);
-    }
-    
-    setSize(); // Initial size and lane calculation
-    reset(); // Initial reset
-    requestAnimationFrame(gameLoop);
-  </script>
+
+        init();
+    </script>
 </body>
 </html>
