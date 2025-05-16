@@ -366,11 +366,11 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
-              const chunkText = decoder.decode(value);
+              const chunkText = decoder.decode(value); 
               if (firstChunk) {
                 firstChunk = false;
               }
-              aiPre.textContent += chunkText;
+              aiPre.textContent += chunkText; 
               accumulatedCode += chunkText;
               llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
             }
@@ -518,7 +518,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
           publishLiveGameBtnRef.current.textContent = 'Publishing...'; // Or change icon to a spinner
 
           const response = await fetch('/api/save-user-game', {
-            method: 'POST',
+                method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
@@ -530,7 +530,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
             throw new Error(errorData.message || `Server error: ${response.status}`);
           }
 
-          const result = await response.json();
+            const result = await response.json();
           alert(result.message || 'Game published successfully! It should now appear in your \"My Games\" list.');
           // Optionally, you could close the editor or refresh parts of the UI
           // For example, if the main page lists user games, you might want to trigger a refresh there.
@@ -832,7 +832,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                     </svg>
                   </button>
                 </div>
-              </form>
+          </form>
             </div>
 
             {/* Right Column: Live Preview */}
