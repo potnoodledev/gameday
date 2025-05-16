@@ -6,6 +6,16 @@ import { io } from 'socket.io-client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import WalletMultiButton from './WalletMultiButton'; // Assuming WalletMultiButton is in the same components folder
 
+// Define UserProfile structure (as a comment for JS file)
+// interface UserProfile {
+//   wallet_address: string;
+//   email?: string | null;
+//   image_url?: string | null;
+//   profilePictureBase64?: string | null;
+//   created_at?: string;
+//   updated_at?: string;
+// }
+
 export const games = [
   // { name: 'Bee Colony Simulator', path: 'bee-colony-simulator/index.html', id: 'bee-colony-simulator' },
   { name: 'Dice Race', path: 'dice-race/index.html', id: 'dice-race' },
@@ -16,6 +26,7 @@ export const games = [
 export default function Layout({ children, currentGameIdFromProp }) {
   const router = useRouter();
   const { connected, publicKey } = useWallet();
+  const [userProfile, setUserProfile] = useState(null); // Added for profile image
 
   const leaderboardListRef = useRef(null);
   const leaderboardListMobileRef = useRef(null);
@@ -42,6 +53,31 @@ export default function Layout({ children, currentGameIdFromProp }) {
   // Store current game in state, to be derived from prop or router query
   const [currentGame, setCurrentGame] = useState(null);
   const [playerName, setPlayerName] = useState('');
+
+  // Fetch user profile data
+  const fetchUserProfile = useCallback(async () => {
+    if (!publicKey) {
+      setUserProfile(null); // Clear profile if no public key
+      return;
+    }
+    try {
+      const response = await fetch(`/api/profile?walletAddress=${publicKey.toBase58()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile(data);
+      } else {
+        setUserProfile(null); // Profile not found or error
+        console.error('Failed to fetch user profile in Layout:', response.status);
+      }
+    } catch (err) {
+      setUserProfile(null);
+      console.error('Error fetching user profile in Layout:', err);
+    }
+  }, [publicKey]);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
 
   // Effect for initializing player name
   useEffect(() => {
@@ -433,24 +469,42 @@ export default function Layout({ children, currentGameIdFromProp }) {
       <Head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Vibe Game A Day</title>
+        <title>{currentGame ? currentGame.name : 'Vibe Game A Day'}</title>
+        <meta name="description" content={currentGame ? `Play ${currentGame.name}` : "Select a game to play"} />
         <script src="https://cdn.tailwindcss.com" async></script>
         <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
       </Head>
 
-      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 100, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        {connected && publicKey && (
-          <Link href="/profile" passHref>
-            <button 
-              className="px-4 py-2 bg-pink-500 text-white text-sm font-bold rounded-md hover:bg-pink-600 transition-colors"
-              style={{ height: '40px' }}
-            >
-              Profile
-            </button>
+      <header className="fixed top-0 left-0 right-0 bg-[#181a1b] text-white p-4 flex justify-between items-center z-50 shadow-lg">
+        <div className="flex items-center">
+          <Link href="/" legacyBehavior>
+            <a className="text-2xl font-bold text-[#b5e3ff] hover:text-pink-400 transition duration-150">
+              VGA D
+            </a>
           </Link>
-        )}
-        <WalletMultiButton />
-      </div>
+          {currentGame && (
+            <span className="ml-4 text-xl text-gray-300">| {currentGame.name}</span>
+          )}
+        </div>
+        
+        <nav className="flex items-center space-x-4">
+          {connected && publicKey && (
+            <Link href="/profile" legacyBehavior>
+              <a className="hover:text-pink-400 transition duration-150 flex items-center space-x-2">
+                {(userProfile?.profilePictureBase64 || userProfile?.image_url) && (
+                  <img 
+                    src={userProfile.profilePictureBase64 || userProfile.image_url}
+                    alt="My Profile" 
+                    className="w-8 h-8 rounded-full object-cover border-2 border-pink-400"
+                  />
+                )}
+                <span>Profile</span>
+              </a>
+            </Link>
+          )}
+          <WalletMultiButton />
+        </nav>
+      </header>
 
       {children} {/* Page specific content will be rendered here */}
 

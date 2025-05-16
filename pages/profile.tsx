@@ -8,6 +8,7 @@ interface UserProfile {
   wallet_address: string;
   email?: string | null;
   image_url?: string | null;
+  profilePictureBase64?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -22,6 +23,8 @@ const ProfilePage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Redirect if not connected
   useEffect(() => {
@@ -67,7 +70,26 @@ const ProfilePage = () => {
     if (publicKey) {
       fetchProfile();
     }
+    // Clear preview when profile is fetched or publicKey changes, to avoid showing stale preview
+    setPreviewUrl(null);
+    setSelectedFile(null);
   }, [publicKey, fetchProfile]);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setImageUrl(''); // Clear existing imageUrl if a new file is selected
+    } else {
+      setSelectedFile(null);
+      setPreviewUrl(null);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,25 +99,50 @@ const ProfilePage = () => {
     setError(null);
     setSuccessMessage(null);
 
+    const formData = new FormData();
+    formData.append('walletAddress', publicKey.toBase58());
+
+    if (email.trim()) {
+      formData.append('email', email.trim());
+    }
+
+    if (selectedFile) {
+      formData.append('profileImage', selectedFile);
+      // No need to append imageUrl if a file is being uploaded, 
+      // as the backend will prioritize the file and nullify image_url.
+    } else if (imageUrl.trim()) {
+      formData.append('imageUrl', imageUrl.trim());
+    }
+    
+    // If neither selectedFile nor imageUrl is provided, 
+    // and you want to explicitly clear any existing image_url or profile_picture_data on the backend,
+    // you might need to send a specific flag or handle it in the backend logic if no image field is present.
+    // Current backend logic: if profilePictureData is null and imageUrl is null in formdata, it COALESCES to existing values.
+    // If selectedFile is present, backend nullifies image_url.
+
     try {
       const response = await fetch('/api/profile', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: publicKey.toBase58(),
-          email: email.trim() || null, // Send null if empty
-          imageUrl: imageUrl.trim() || null, // Send null if empty
-        }),
+        // Headers are not explicitly set to Content-Type: multipart/form-data
+        // The browser will do it automatically when FormData is used as body, along with the correct boundary.
+        body: formData,
       });
 
       if (response.ok) {
         const updatedProfile: UserProfile = await response.json();
         setProfile(updatedProfile);
         setEmail(updatedProfile.email || '');
-        setImageUrl(updatedProfile.image_url || '');
+        setImageUrl(updatedProfile.image_url || ''); // This might be null if an image was just uploaded
+        
         setSuccessMessage('Profile saved successfully!');
+        setSelectedFile(null); // Clear selection
+        setPreviewUrl(null); // Clear preview
+
+        // Crucially, re-fetch the profile to get the latest state,
+        // especially if the backend now has profile_picture_data that needs to be displayed.
+        // The display logic might need adjustment if you serve the BYTEA data as base64 from the GET /api/profile endpoint.
+        await fetchProfile(); 
+
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to save profile');
@@ -125,7 +172,22 @@ const ProfilePage = () => {
         <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
       </Head>
 
-      <div className="fixed top-4 right-4 z-50">
+      <div className="fixed top-4 right-4 z-50 flex items-center space-x-4">
+        {connected && publicKey && (
+          <div 
+            onClick={() => router.push('/profile')} 
+            className="hover:text-pink-400 transition duration-150 flex items-center space-x-2 cursor-pointer text-white"
+          >
+            {(profile?.profilePictureBase64 || profile?.image_url) && (
+              <img 
+                src={profile.profilePictureBase64 || profile.image_url || ''}
+                alt="My Profile" 
+                className="w-8 h-8 rounded-full object-cover border-2 border-pink-400"
+              />
+            )}
+            <span>Profile</span>
+          </div>
+        )}
         <WalletMultiButton />
       </div>
 
@@ -139,9 +201,13 @@ const ProfilePage = () => {
           </button>
           <h1 className="text-3xl font-bold mb-8 text-pink-400 text-center">Your Profile</h1>
           
-          {profile?.image_url && (
+          {(previewUrl || profile?.profilePictureBase64 || profile?.image_url) && (
             <div className="mb-6 flex justify-center">
-              <img src={profile.image_url} alt="Profile" className="w-32 h-32 rounded-full object-cover border-4 border-pink-400" />
+              <img 
+                src={previewUrl || profile?.profilePictureBase64 || profile?.image_url || ''} 
+                alt="Profile" 
+                className="w-32 h-32 rounded-full object-cover border-4 border-pink-400" 
+              />
             </div>
           )}
 
@@ -163,7 +229,17 @@ const ProfilePage = () => {
               />
             </div>
             <div>
-              <label htmlFor="imageUrl" className="block text-sm font-medium text-pink-300 mb-1">Profile Image URL</label>
+              <label htmlFor="profileImage" className="block text-sm font-medium text-pink-300 mb-1">Change Profile Picture</label>
+              <input 
+                type="file"
+                id="profileImage"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="imageUrl" className="block text-sm font-medium text-pink-300 mb-1">Or enter Image URL</label>
               <input 
                 type="url" 
                 id="imageUrl" 
