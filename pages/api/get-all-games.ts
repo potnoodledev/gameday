@@ -42,10 +42,11 @@ export default async function handler(
           g.id AS "gameId", 
           g.game_name AS "gameName", 
           g.user_wallet_address AS "userId", 
-          COALESCE(up.email, SUBSTRING(g.user_wallet_address FROM 1 FOR 6) || '...') AS "userName", 
+          COALESCE(NULLIF(up.username, ''), NULLIF(up.email, ''), SUBSTRING(g.user_wallet_address FROM 1 FOR 4) || '..' || SUBSTRING(g.user_wallet_address FROM LENGTH(g.user_wallet_address) - 3 FOR 4)) AS "userName", 
           g.updated_at AS "lastUpdated",
           up.image_url AS "rawImageUrl",         -- Raw image_url from user_profiles
-          up.profile_picture_data AS "profilePictureData" -- Raw BYTEA data
+          up.profile_picture_data AS "profilePictureData", -- Raw BYTEA data
+          up.username AS "userProvidedUsername" -- Also fetch username directly for potential other uses
         FROM user_editable_games g
         LEFT JOIN user_profiles up ON g.user_wallet_address = up.wallet_address
         ORDER BY g.updated_at DESC;

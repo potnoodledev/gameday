@@ -6,6 +6,8 @@ import { io } from 'socket.io-client';
 import { useWallet } from '@solana/wallet-adapter-react';
 import WalletMultiButton from './WalletMultiButton'; // Assuming WalletMultiButton is in the same components folder
 
+const LIVE_GAME_DRAFT_KEY = 'liveGameDraftHTML'; // Moved to top-level constant
+
 // Define UserProfile structure (as a comment for JS file)
 // interface UserProfile {
 //   wallet_address: string;
@@ -23,7 +25,7 @@ export const games = [
   { name: 'Live Game', path: 'livegame.html', id: 'livegame' }
 ];
 
-export default function Layout({ children, currentGameIdFromProp }) {
+export default function Layout({ children, currentGameIdFromProp, currentGameHtmlForEditor, currentSavedGameName }) {
   const router = useRouter();
   const { connected, publicKey } = useWallet();
   const [userProfile, setUserProfile] = useState(null); // Added for profile image
@@ -44,8 +46,10 @@ export default function Layout({ children, currentGameIdFromProp }) {
   const publishLiveGameBtnRef = useRef(null);
   const resetLiveGameBtnRef = useRef(null);
   const liveGamePreviewRef = useRef(null);
+  const deleteLiveGameBtnRef = useRef(null);
   const settingsBtnRef = useRef(null);
   const settingsMenuRef = useRef(null);
+  const liveGameEditorTitleRef = useRef(null); // Added ref for editor title
   const closeSettingsMenuRef = useRef(null);
   const gameSelectRef = useRef(null);
   const nameInputRef = useRef(null);
@@ -128,8 +132,6 @@ export default function Layout({ children, currentGameIdFromProp }) {
   }, [loadGameIntoIframe]);
   
   useEffect(() => {
-    const LIVE_GAME_DRAFT_KEY = 'liveGameDraftHTML';
-    
     const gameFrame = gameFrameRef.current;
     // const leaderboardList = leaderboardListRef.current; // Removed leaderboard
     // const leaderboardListMobile = leaderboardListMobileRef.current; // Removed leaderboard
@@ -145,6 +147,7 @@ export default function Layout({ children, currentGameIdFromProp }) {
     const publishLiveGameBtn = publishLiveGameBtnRef.current;
     const resetLiveGameBtn = resetLiveGameBtnRef.current;
     const liveGamePreview = liveGamePreviewRef.current;
+    const deleteLiveGameBtn = deleteLiveGameBtnRef.current;
     const settingsBtn = settingsBtnRef.current;
     const settingsMenu = settingsMenuRef.current;
     const closeSettingsMenu = closeSettingsMenuRef.current;
@@ -248,16 +251,22 @@ export default function Layout({ children, currentGameIdFromProp }) {
         });
     };
 
-    // Action to open the Live Game Editor (used by new + button and old pencil button)
     const openLiveGameEditor = () => {
-      if (liveGameEditorModalRef.current) liveGameEditorModalRef.current.style.display = 'flex';
-      const draftHTML = localStorage.getItem(LIVE_GAME_DRAFT_KEY);
-      if (draftHTML && liveGamePreviewRef.current) {
-          liveGamePreviewRef.current.srcdoc = draftHTML;
-      } else if (liveGamePreviewRef.current) {
-          liveGamePreviewRef.current.removeAttribute('srcdoc');
-          const currentSrc = liveGamePreviewRef.current.src.split('?')[0];
-          liveGamePreviewRef.current.src = `${currentSrc}?t=${new Date().getTime()}`;
+      if (currentGameHtmlForEditor) { // Check if HTML content is passed
+        localStorage.setItem(LIVE_GAME_DRAFT_KEY, currentGameHtmlForEditor);
+      }
+      // If not passed, localStorage remains as is (could be an old draft or nothing)
+      // livegame.html will handle loading from localStorage or its default
+
+      if (liveGameEditorModalRef.current) { // Directly use the ref.current
+        liveGameEditorModalRef.current.style.display = 'flex'; // Revert to style.display to show
+      }
+      if (liveGamePreviewRef.current) { // Directly use the ref.current
+        // Add cache-busting query param to ensure fresh load which reads localStorage
+        liveGamePreviewRef.current.src = `/games/livegame.html?t=${Date.now()}`;
+      }
+      if (llmChatInputRef.current) { // Directly use the ref.current
+        llmChatInputRef.current.focus();
       }
     };
 
@@ -315,7 +324,7 @@ export default function Layout({ children, currentGameIdFromProp }) {
         aiMsgDiv.className = 'mb-2 p-2 bg-gray-700 rounded-lg self-start relative group text-white'; // Added text-white
         const aiPre = document.createElement('pre');
         aiPre.className = 'whitespace-pre-wrap break-words';
-        aiPre.textContent = 'AI: generating code...';
+        aiPre.textContent = 'PotNoodleDev: Now cooking up a game...';
         aiMsgDiv.appendChild(aiPre);
         llmChatHistory.appendChild(aiMsgDiv);
         llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
@@ -323,14 +332,27 @@ export default function Layout({ children, currentGameIdFromProp }) {
         let accumulatedCode = "";
 
         try {
+          // Determine the base prompt based on whether we are editing an existing game
+          const currentCodeBase = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
+          const isEditingExistingGame = currentCodeBase && currentCodeBase.trim() !== '' && currentCodeBase.trim() !== '<!-- Start coding here -->';
+          
+          let systemPrompt;
+          if (isEditingExistingGame && currentGameHtmlForEditor) { // Prioritize if editor was opened with game from URL
+            systemPrompt = `The user wants to change their existing game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
+          } else if (isEditingExistingGame) {
+            systemPrompt = `The user is continuing to edit their game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
+          } else {
+            systemPrompt = `The user wants to make a new game. Create a new game based on this request: ${userMessage}`;
+          }
+
           const response = await fetch('/api/generate-game-update', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              prompt: userMessage,
-              currentCode: liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '<!-- Start coding here -->',
+              prompt: systemPrompt, // Use the dynamically generated systemPrompt
+              currentCode: currentCodeBase || '<!-- Start coding here -->', // Ensure currentCode is always passed
             }),
           });
 
@@ -338,7 +360,7 @@ export default function Layout({ children, currentGameIdFromProp }) {
           if (contentType && contentType.includes('text/plain')) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            aiPre.textContent = "AI: "; // Clear placeholder, add prefix
+            aiPre.textContent = "PotNoodleDev: "; // Clear placeholder, add prefix
             let firstChunk = true;
 
             while (true) {
@@ -361,7 +383,7 @@ export default function Layout({ children, currentGameIdFromProp }) {
                 const data = JSON.parse(responseText);
                 if (response.ok) {
                     if (data.newCode) {
-                        aiPre.textContent = "AI: " + data.newCode;
+                        aiPre.textContent = "PotNoodleDev: " + data.newCode;
                         accumulatedCode = data.newCode;
                     } else {
                         throw new Error('AI response did not contain newCode.');
@@ -378,11 +400,21 @@ export default function Layout({ children, currentGameIdFromProp }) {
             throw new Error(`Unexpected response type: ${contentType}`);
           }
 
-          if (accumulatedCode && liveGamePreview) {
-            liveGamePreview.srcdoc = accumulatedCode;
-            localStorage.setItem(LIVE_GAME_DRAFT_KEY, accumulatedCode);
-          } else if (!aiPre.textContent.toLowerCase().includes('error') && !accumulatedCode) {
-            aiPre.textContent += (aiPre.textContent.endsWith("AI: ") ? '' : '\n') + "(AI generated empty content)";
+          let cleanedCode = accumulatedCode;
+          // Remove markdown code block fences if present
+          cleanedCode = cleanedCode.replace(/^```html\n?/i, '').replace(/\n?```$/, '');
+          // Fallback for generic code blocks if html wasn't specified
+          cleanedCode = cleanedCode.replace(/^```\n?/i, '').replace(/\n?```$/, '');
+          cleanedCode = cleanedCode.trim();
+
+          if (cleanedCode && liveGamePreview) {
+            liveGamePreview.srcdoc = cleanedCode;
+            localStorage.setItem(LIVE_GAME_DRAFT_KEY, cleanedCode);
+          } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode && accumulatedCode.length > 0) {
+            // If cleaning resulted in empty code but there was original content, indicate it
+            aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated content that was cleaned to empty. Original might have been only markdown fences.)";
+          } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode) {
+            aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated empty content)";
           }
 
         } catch (error) {
@@ -399,6 +431,19 @@ export default function Layout({ children, currentGameIdFromProp }) {
           llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
         }
       };
+
+      // Add keydown listener to chat input for Enter submission
+      if (llmChatInputRef.current && llmChatFormRef.current) {
+        llmChatInputRef.current.onkeydown = (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevent newline
+            if (llmChatFormRef.current) {
+              // Modern way to programmatically submit a form, triggering onsubmit
+              llmChatFormRef.current.requestSubmit(); 
+            }
+          }
+        };
+      }
     }
 
     if (resetLiveGameBtn && liveGamePreview && llmChatHistory) {
@@ -425,36 +470,46 @@ export default function Layout({ children, currentGameIdFromProp }) {
     if (publishLiveGameBtnRef.current && liveGamePreviewRef.current && llmChatInputRef.current) {
       publishLiveGameBtnRef.current.onclick = async () => {
         const liveGamePreview = liveGamePreviewRef.current;
-        const draftHTML = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '<!-- Default game HTML or placeholder -->';
+        const draftHTML = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
 
-        if (!draftHTML || draftHTML.trim() === '<!-- Default game HTML or placeholder -->' || draftHTML.trim() === '') {
+        if (!draftHTML || draftHTML.trim() === '' || draftHTML.trim() === '<!-- Start coding here -->') {
           alert('There is no game content to publish. Try editing the game first!');
           return;
         }
 
         if (!connected || !publicKey) {
           alert('Please connect your wallet to publish a game.');
-          // Optionally, trigger wallet connection here
           return;
         }
 
-        // Prompt for a game name, or use a default
-        let gameName = prompt("Enter a name for your game:", `My Custom Game - ${new Date().toLocaleTimeString()}`);
-        if (!gameName) { // User cancelled or entered nothing
-          alert('Publishing cancelled. A game name is required.');
-          return;
-        }
-        gameName = gameName.trim();
-        if (!gameName) {
-            alert('Invalid game name. Publishing cancelled.');
+        let gameNameToPublish;
+
+        if (currentGameIdFromProp && currentSavedGameName) {
+          // Editing an existing, loaded game. Use its current name, do not prompt.
+          gameNameToPublish = currentSavedGameName;
+          // Optionally, add a specific confirmation for updating an existing game, e.g.:
+          // if (!window.confirm(`This will update your existing game: "${currentSavedGameName}". Continue?`)) {
+          //   return;
+          // }
+        } else {
+          // New game or editing a local draft not yet saved with an ID.
+          let promptedName = prompt("Enter a name for your game:", `My Custom Game - ${new Date().toLocaleTimeString()}`);
+          if (!promptedName) { 
+            alert('Publishing cancelled. A game name is required.');
             return;
+          }
+          promptedName = promptedName.trim();
+          if (!promptedName) {
+              alert('Invalid game name. Publishing cancelled.');
+              return;
+          }
+          gameNameToPublish = promptedName;
         }
 
         const payload = {
           walletAddress: publicKey.toBase58(),
-          gameName: gameName,
-          htmlContent: draftHTML,
-          // You might want to add other metadata like a thumbnail, description, etc.
+          gameName: gameNameToPublish,
+          htmlContent: draftHTML, 
         };
 
         try {
@@ -494,6 +549,97 @@ export default function Layout({ children, currentGameIdFromProp }) {
       };
     }
 
+    // Update button appearance based on currentGameHtmlForEditor
+    if (settingsBtnRef.current) {
+      const btn = settingsBtnRef.current;
+      // Define SVGs here for clarity or ensure they are accessible
+      const plusIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" class="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>`;
+      const pencilIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" class="w-7 h-7"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
+
+      if (currentGameHtmlForEditor) {
+        btn.innerHTML = pencilIconSvg;
+        btn.classList.remove('bg-green-500', 'hover:bg-green-600');
+        btn.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+      } else {
+        btn.innerHTML = plusIconSvg;
+        btn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+        btn.classList.add('bg-green-500', 'hover:bg-green-600');
+      }
+    }
+
+    // Update editor title text
+    if (liveGameEditorTitleRef.current) {
+      if (currentGameHtmlForEditor) {
+        liveGameEditorTitleRef.current.textContent = "Ask PotNoodleDev to change the game";
+      } else {
+        liveGameEditorTitleRef.current.textContent = "Ask PotNoodleDev to make a game";
+      }
+    }
+
+    // Conditionally show/hide delete button
+    if (deleteLiveGameBtnRef.current) {
+      if (currentGameIdFromProp && currentGameHtmlForEditor) { // Only show if editing a game from a page (implies it might be a saved game)
+        deleteLiveGameBtnRef.current.style.display = 'flex'; // Or 'inline-flex' based on styling needs
+      } else {
+        deleteLiveGameBtnRef.current.style.display = 'none';
+      }
+    }
+
+    // Define onClick handler for the delete button
+    const handleDeleteGame = async () => {
+      if (!currentGameIdFromProp || !publicKey) {
+        alert('Cannot delete game: Missing game ID or wallet connection.');
+        return;
+      }
+
+      if (window.confirm('Are you sure you want to permanently delete this game? This action cannot be undone.')) {
+        try {
+          const response = await fetch('/api/delete-user-game', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              gameId: currentGameIdFromProp,
+              walletAddress: publicKey.toBase58(),
+            }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert(result.message || 'Game deleted successfully.');
+            localStorage.removeItem(LIVE_GAME_DRAFT_KEY);
+            if (liveGamePreviewRef.current) {
+              liveGamePreviewRef.current.removeAttribute('srcdoc');
+              liveGamePreviewRef.current.src = `/games/livegame.html?t=${Date.now()}`;
+            }
+            if (llmChatHistoryRef.current) {
+              llmChatHistoryRef.current.innerHTML = '';
+            }
+            if (llmChatInputRef.current) {
+              llmChatInputRef.current.value = '';
+            }
+            // Close the editor modal before redirecting
+            if (liveGameEditorModalRef.current) {
+                liveGameEditorModalRef.current.style.display = 'none';
+            }
+            router.push('/'); // Redirect to home page
+          } else {
+            throw new Error(result.error || 'Failed to delete game.');
+          }
+        } catch (error) {
+          console.error('Error deleting game:', error);
+          alert(`Error: ${error.message}`);
+        }
+      }
+    };
+
+    // Assign onClick handler to the delete button
+    if (deleteLiveGameBtnRef.current) {
+      deleteLiveGameBtnRef.current.onclick = handleDeleteGame;
+    }
+
     return () => {
       window.removeEventListener('message', handleWindowMessage);
       // window.removeEventListener('resize', updateLeaderboardButtonVisibility); // Removed leaderboard
@@ -508,7 +654,10 @@ export default function Layout({ children, currentGameIdFromProp }) {
     fetchUserProfile, 
     loadGameIntoIframe, 
     connected,
-    publicKey
+    publicKey,
+    currentGameHtmlForEditor,
+    currentGameIdFromProp,
+    currentSavedGameName
   ]); 
 
   return (
@@ -616,7 +765,13 @@ export default function Layout({ children, currentGameIdFromProp }) {
           <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
             {/* Left Column: Chat and Controls */}
             <div className="w-full md:w-1/3 flex flex-col p-4 space-y-4 border-r border-gray-700 overflow-y-auto">
-              <div className="text-lg font-semibold text-pink-300">Chat to Build</div>
+              <div 
+                id="liveGameEditorTitle"
+                ref={liveGameEditorTitleRef}
+                className="text-lg font-semibold text-pink-300"
+              >
+                Ask PotNoodleDev to make a game
+              </div>
               <div 
                 id="llmChatHistory" 
                 ref={llmChatHistoryRef} 
@@ -633,6 +788,18 @@ export default function Layout({ children, currentGameIdFromProp }) {
                   rows="3"
                 ></textarea>
                 <div className="flex items-center justify-end space-x-2">
+                  <button 
+                    type="button" 
+                    title="Delete Game"
+                    id="deleteLiveGameBtn" 
+                    ref={deleteLiveGameBtnRef} 
+                    className="p-2.5 bg-gray-600 text-white rounded-md shadow hover:bg-gray-700 transition flex items-center justify-center"
+                    style={{display: 'none'}} // Hidden by default
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c1.153 0 2.243.096 3.298.286m7.096 0c.23.02.458.04.682.06M5.28 5.79A48.074 48.074 0 018.084 5.5H11m-5.72 0c-.04.166-.078.334-.114.504m11.422 0a48.074 48.074 0 00-3.306-.286m0 0L12.995 3.695A2.25 2.25 0 0010.996 2.25H9.004A2.25 2.25 0 007.005 3.695L6.28 5.79M12 12.25v4.5m0-4.5H12.06" />
+                    </svg>
+                  </button>
                   <button 
                     type="button" 
                     title="Reset Game"

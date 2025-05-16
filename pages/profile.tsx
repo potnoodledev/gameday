@@ -7,6 +7,7 @@ import WalletMultiButton from '../components/WalletMultiButton'; // Assuming pat
 interface UserProfile {
   wallet_address: string;
   email?: string | null;
+  username?: string | null;
   image_url?: string | null;
   profilePictureBase64?: string | null;
   created_at?: string;
@@ -18,6 +19,7 @@ const ProfilePage = () => {
   const { publicKey, connected } = useWallet();
 
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,11 +51,13 @@ const ProfilePage = () => {
         const data: UserProfile = await response.json();
         setProfile(data);
         setEmail(data.email || '');
+        setUsername(data.username || '');
         setImageUrl(data.image_url || '');
       } else if (response.status === 404) {
         // Profile not found, initialize with empty fields for creation
         setProfile(null); // Or set a default structure with walletAddress
         setEmail('');
+        setUsername('');
         setImageUrl('');
       } else {
         const errorData = await response.json();
@@ -106,6 +110,10 @@ const ProfilePage = () => {
       formData.append('email', email.trim());
     }
 
+    if (username.trim()) {
+      formData.append('username', username.trim());
+    }
+
     if (selectedFile) {
       formData.append('profileImage', selectedFile);
       // No need to append imageUrl if a file is being uploaded, 
@@ -132,6 +140,7 @@ const ProfilePage = () => {
         const updatedProfile: UserProfile = await response.json();
         setProfile(updatedProfile);
         setEmail(updatedProfile.email || '');
+        setUsername(updatedProfile.username || '');
         setImageUrl(updatedProfile.image_url || ''); // This might be null if an image was just uploaded
         
         setSuccessMessage('Profile saved successfully!');
@@ -217,6 +226,22 @@ const ProfilePage = () => {
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-6">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-pink-300 mb-1">Username</label>
+              <input 
+                type="text" 
+                id="username" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your_cool_username"
+                className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500" 
+                minLength={3}
+                maxLength={50}
+                pattern="[a-zA-Z0-9_]+"
+                title="Username can only contain letters, numbers, and underscores, and be 3-50 characters long."
+              />
+              <p className="mt-1 text-xs text-gray-400">Letters, numbers, and underscores only. 3-50 characters.</p>
+            </div>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-pink-300 mb-1">Email Address</label>
               <input 

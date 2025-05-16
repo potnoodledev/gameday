@@ -2,491 +2,111 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Rhythm Striker</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto:wght@400&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; overflow: hidden !important; }
-        .orbitron { font-family: 'Orbitron', sans-serif; }
-        #gameCanvas { touch-action: none; background-color: #1f2937; } /* bg-gray-800 */
-        
-        @keyframes fadeOutUp {
-            0% { opacity: 1; transform: translateY(0) scale(1.2); }
-            50% { opacity: 0.9; transform: translateY(-15px) scale(1); }
-            100% { opacity: 0; transform: translateY(-40px) scale(0.7); }
+    <title>Live Game Editor - New Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // Attempt to load and render HTML from localStorage if a draft exists
+        const LIVE_GAME_DRAFT_KEY = 'liveGameDraftHTML';
+        const savedHtml = localStorage.getItem(LIVE_GAME_DRAFT_KEY);
+        if (savedHtml && savedHtml.trim() !== '') {
+            document.open();
+            document.write(savedHtml);
+            document.close();
         }
-        .animate-feedback {
-            animation: fadeOutUp 0.7s cubic-bezier(0.165, 0.84, 0.44, 1) forwards; /* easeOutQuart */
-            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        // If no savedHtml, or it's empty, the new template content below will load.
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #1a202c; /* bg-gray-900 */
+            color: #e2e8f0; /* text-gray-300 */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #2d3748; /* bg-gray-800 */
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            max-width: 90%;
+            width: 500px;
+        }
+        h1 {
+            color: #f687b3; /* text-pink-400 */
+            font-size: 1.875rem; /* text-3xl */
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        p {
+            margin-bottom: 0.75rem; /* mb-3 */
+            line-height: 1.6;
+        }
+        .placeholder-area {
+            border: 2px dashed #4a5568; /* border-gray-700 */
+            min-height: 150px;
+            margin: 1.5rem auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718096; /* text-gray-500 */
+            font-style: italic;
+            border-radius: 0.25rem;
+        }
+        code {
+            background-color: #4a5568; /* bg-gray-700 */
+            color: #e2e8f0; /* text-gray-300 */
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 0.9em;
+            border-radius: 3px;
         }
     </style>
 </head>
-<body class="bg-gray-800 text-white flex flex-col items-center justify-center min-h-screen select-none">
-    <div id="appContainer" class="relative w-full max-w-md flex flex-col items-center bg-gray-900/95 shadow-xl rounded-lg min-h-[90vh] md:min-h-[650px] max-h-screen overflow-hidden" style="max-width:420px;">
-        <header class="w-full p-2 bg-black/50 backdrop-blur-sm z-10">
-            <div class="flex justify-between items-center px-2">
-                <div id="scoreDisplay" class="orbitron text-yellow-400 text-base sm:text-lg">Score: 0</div>
-                <div id="comboDisplay" class="orbitron text-blue-400 text-base sm:text-lg">Combo: 0</div>
-                <div id="highscoreDisplay" class="orbitron text-cyan-400 text-base sm:text-lg">Best: 0</div>
-            </div>
-        </header>
-        <div class="flex-grow relative w-full flex items-center justify-center p-0">
-            <canvas id="gameCanvas" width="360" height="540"></canvas>
-            <div id="feedbackContainer" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-3xl orbitron pointer-events-none z-20 flex flex-col items-center space-y-1">
-                <!-- Feedback like "PERFECT" will appear here -->
-            </div>
-            <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md z-30 hidden">
-                <div class="text-3xl md:text-4xl orbitron text-red-500 mb-3">Song Finished!</div>
-                <div id="finalScoreDisplay" class="text-xl md:text-2xl text-yellow-400 mb-1">Score: 0</div>
-                <div id="maxComboDisplay" class="text-lg md:text-xl text-blue-400 mb-4">Max Combo: 0</div>
-                <button id="restartButton" class="orbitron bg-blue-600 hover:bg-blue-700 text-white font-bold rounded px-8 py-3 text-lg active:bg-blue-800 shadow-lg transition-colors">
-                    Play Again
-                </button>
-            </div>
-            <div id="startScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-40">
-                <div class="text-4xl orbitron text-yellow-400 mb-3 animate-pulse">Rhythm Striker</div>
-                <div class="text-gray-300 text-center mb-8 px-4 max-w-xs">
-                    Hit the notes as they reach the line!
-                    <br>Keys: <b>A, S, K, L</b>
-                    <br>Touch: Tap bottom lanes.
-                </div>
-                <button id="startButton" class="orbitron bg-green-600 hover:bg-green-700 text-white font-bold rounded px-10 py-4 text-xl active:bg-green-800 shadow-lg transition-colors">
-                    Start Game
-                </button>
-            </div>
-        </div>
-         <div id="touchControlsContainer" class="w-full h-[20%] absolute bottom-0 left-0 z-20 md:hidden opacity-0">
-            <!-- Transparent touch overlay, logic handled in JS based on canvas regions -->
-        </div>
+<body>
+    <div class="container">
+        <h1>Welcome to the Live Game Editor!</h1>
+        <p class="font-semibold text-pink-300">
+            Try typing one of these into the chat:
+        </p>
+        <ul class="space-y-3 mb-6">
+            <li class="bg-sky-500 text-white p-3 rounded-lg rounded-bl-none shadow-md max-w-xs sm:max-w-sm md:max-w-md mr-auto">
+                <code style="background-color: transparent;">"Make a game where I pet a thousand fluffy kittens."</code>
+            </li>
+            <li class="bg-indigo-500 text-white p-3 rounded-lg rounded-br-none shadow-md max-w-xs sm:max-w-sm md:max-w-md ml-auto">
+                <code style="background-color: transparent;">"Turn this page into a disco party for space hamsters!"</code>
+            </li>
+            <li class="bg-sky-500 text-white p-3 rounded-lg rounded-bl-none shadow-md max-w-xs sm:max-w-sm md:max-w-md mr-auto">
+                <code style="background-color: transparent;">"Add a giant, friendly cactus that tells jokes when you poke it."</code>
+            </li>
+            <li class="bg-indigo-500 text-white p-3 rounded-lg rounded-br-none shadow-md max-w-xs sm:max-w-sm md:max-w-md ml-auto">
+                <code style="background-color: transparent;">"Summon a portal to a world made entirely of cheese."</code>
+            </li>
+            <li class="bg-sky-500 text-white p-3 rounded-lg rounded-bl-none shadow-md max-w-xs sm:max-w-sm md:max-w-md mr-auto">
+                <code style="background-color: transparent;">"Create a button that, when clicked, makes a tiny elephant appear and trumpet."</code>
+            </li>
+        </ul>
+
+        <hr class="border-gray-600 my-6">
+
+        <h2 class="font-semibold text-pink-300">Publishing Your Game</h2>
+        <p>
+            Happy with your game? Click the 
+            <span class="bg-green-600 text-white px-1.5 py-1 rounded-md shadow-md inline-flex items-center space-x-1 text-sm align-middle" style="font-size: 0.8em; padding-top: 0.1em; padding-bottom: 0.1em;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.344 2.25A4.5 4.5 0 0118 19.5a4.5 4.5 0 01-3.75-3.75H9.75A4.5 4.5 0 016.75 19.5z" />
+                </svg>
+                <span style="line-height: 1;">Publish</span>
+            </span>
+            button in the editor's control panel to save and share it!
+        </p>
+        
     </div>
-
-    <script type="module">
-    const CANVAS_W = 360;
-    const CANVAS_H = 540;
-    const NUM_LANES = 4;
-    const LANE_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e']; // Red, Orange, Yellow, Green
-    const LANE_ACTIVE_COLORS = ['#f87171', '#fb923c', '#facc15', '#4ade80'];
-    const NOTE_COLOR_DEFAULT = '#cbd5e1'; // slate-300
-    const HIT_LINE_Y_RATIO = 0.82;
-    const NOTE_SPAWN_Y_RATIO = 0.15; // Notes spawn visually a bit lower
-    const NOTE_VANISH_Y_RATIO = 0.05; // Vanishing point for perspective lines
-
-    const NOTE_RADIUS_MIN = 4;
-    const NOTE_RADIUS_MAX = 20;
-    const FALL_DURATION_MS = 1800;
-    const HIT_WINDOW_MS = { PERFECT: 60, GOOD: 100, OKAY: 150 }; // Okay instead of OK for text
-    const MISS_TOLERANCE_MS = 200; // Time after hitTime to count as miss if not hit
-    const KEY_MAPPING = ['a', 's', 'k', 'l'];
-    
-    const FRETBOARD_WIDTH_BOTTOM_RATIO = 0.9;
-    const FRETBOARD_WIDTH_TOP_RATIO = 0.3;
-
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreDisplay = document.getElementById('scoreDisplay');
-    const comboDisplay = document.getElementById('comboDisplay');
-    const highscoreDisplay = document.getElementById('highscoreDisplay');
-    const feedbackContainer = document.getElementById('feedbackContainer');
-    const gameOverScreen = document.getElementById('gameOverScreen');
-    const finalScoreDisplay = document.getElementById('finalScoreDisplay');
-    const maxComboDisplay = document.getElementById('maxComboDisplay');
-    const restartButton = document.getElementById('restartButton');
-    const startScreen = document.getElementById('startScreen');
-    const startButton = document.getElementById('startButton');
-    const touchControlsContainer = document.getElementById('touchControlsContainer');
-
-    let score, combo, maxComboInGame, highscore, gameStartTime, elapsedTime, notes, songChart, currentSongIndex, isPlaying, animationFrameId, nextNoteId;
-    let audioCtx;
-    let laneActiveUntil = [0,0,0,0]; // Timestamp until lane is visually active
-
-    function initAudio() {
-        if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-    }
-    
-    function playSound(type, perfect = false) {
-        if (!audioCtx) return;
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        gainNode.gain.setValueAtTime(0.001, audioCtx.currentTime); // Start silent for ramp
-
-        if (type === 'hit') {
-            oscillator.type = 'triangle';
-            const freq = perfect ? 880 : 660; // Higher pitch for perfect
-            oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.01); // Quick attack
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-            oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.15);
-        } else if (type === 'miss') {
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(110, audioCtx.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.06, audioCtx.currentTime + 0.01);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-            oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.2);
-        }
-    }
-
-    function lerp(a, b, t) { return a + (b - a) * t; }
-
-    function generateSongChart() {
-        songChart = [];
-        nextNoteId = 0;
-        let currentTime = 1500; // First note appears aiming for this hitTime
-        const patterns = [
-            [0], [1], [2], [3], // Single notes
-            [0,1], [1,2], [2,3], // Two adjacent
-            [0,2], [1,3], // Skips
-            [0,3], // Outer
-            [0,1,2], [1,2,3] // Triple
-        ];
-
-        for (let i = 0; i < 80; i++) { // ~80 notes for a short song
-            const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-            for (const lane of pattern) {
-                 songChart.push({
-                    id: nextNoteId++,
-                    lane: lane,
-                    hitTime: currentTime,
-                    spawned: false,
-                    yProgress: 0,
-                    hitStatus: null,
-                    processed: false,
-                });
-            }
-            if (pattern.length > 1 && Math.random() < 0.3) { // Chord, shorter delay
-                 currentTime += Math.random() * 200 + 350; // 350-550ms
-            } else { // Single or spaced, longer delay
-                 currentTime += Math.random() * 300 + 500; // 500-800ms
-            }
-        }
-    }
-
-    function resetGameState() {
-        score = 0;
-        combo = 0;
-        maxComboInGame = 0;
-        highscore = parseInt(localStorage.getItem("rhythmstriker_highscore")) || 0;
-        notes = [];
-        generateSongChart();
-        currentSongIndex = 0;
-        isPlaying = false;
-        updateUI();
-    }
-
-    function startGame() {
-        initAudio(); // Initialize audio context on user gesture
-        resetGameState();
-        isPlaying = true;
-        gameStartTime = Date.now();
-        elapsedTime = 0;
-        startScreen.classList.add('hidden');
-        gameOverScreen.classList.add('hidden');
-        feedbackContainer.innerHTML = ''; // Clear any previous feedback
-        if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        gameLoop();
-    }
-    
-    function updateUI() {
-        scoreDisplay.textContent = `Score: ${score}`;
-        comboDisplay.textContent = `Combo: ${combo}`;
-        highscoreDisplay.textContent = `Best: ${highscore}`;
-    }
-
-    function showFeedbackDisplay(text, type) {
-        const feedbackEl = document.createElement('div');
-        feedbackEl.textContent = text;
-        let typeClass = '';
-        if (type === 'PERFECT') typeClass = 'text-yellow-300 text-4xl';
-        else if (type === 'GOOD') typeClass = 'text-green-400 text-3xl';
-        else if (type === 'OKAY') typeClass = 'text-sky-400 text-2xl';
-        else typeClass = 'text-red-500 text-xl'; // Miss
-        
-        feedbackEl.className = `orbitron animate-feedback ${typeClass}`;
-        
-        // Limit to 2-3 feedback messages
-        if (feedbackContainer.children.length > 2) {
-            feedbackContainer.removeChild(feedbackContainer.firstChild);
-        }
-        feedbackContainer.appendChild(feedbackEl);
-        setTimeout(() => { // Ensure removal if animation doesn't fire 'animationend' or for cleanup
-            if (feedbackEl.parentNode === feedbackContainer) {
-                 feedbackContainer.removeChild(feedbackEl);
-            }
-        }, 700);
-    }
-
-    function spawnNotes() {
-        while (currentSongIndex < songChart.length && 
-               elapsedTime >= songChart[currentSongIndex].hitTime - FALL_DURATION_MS) {
-            const noteToSpawn = songChart[currentSongIndex];
-            if (!noteToSpawn.spawned) {
-                notes.push({ ...noteToSpawn, spawned: true });
-            }
-            currentSongIndex++;
-        }
-    }
-
-    function updateNotePositions() {
-        notes.forEach(note => {
-            if (note.processed) return;
-            // yProgress: 0 at spawn, 1 at hit line, >1 after hit line
-            note.yProgress = (elapsedTime - (note.hitTime - FALL_DURATION_MS)) / FALL_DURATION_MS;
-        });
-    }
-
-    function checkMissedNotes() {
-        notes.forEach(note => {
-            if (note.processed || note.hitStatus) return;
-            if (elapsedTime > note.hitTime + MISS_TOLERANCE_MS) {
-                note.hitStatus = 'MISS';
-                note.processed = true;
-                combo = 0;
-                // playSound('miss'); // Optional: sound for auto-miss
-                showFeedbackDisplay('MISS', 'MISS');
-                updateUI();
-            }
-        });
-        // Clean up processed notes that are well off-screen
-        notes = notes.filter(note => !note.processed || note.yProgress < 1.5);
-    }
-    
-    function checkGameOver() {
-        if (isPlaying && currentSongIndex >= songChart.length && notes.filter(n => !n.processed).length === 0) {
-            isPlaying = false;
-            cancelAnimationFrame(animationFrameId);
-            finalScoreDisplay.textContent = `Score: ${score}`;
-            maxComboDisplay.textContent = `Max Combo: ${maxComboInGame}`;
-            if (score > highscore) {
-                highscore = score;
-                localStorage.setItem("rhythmstriker_highscore", highscore);
-            }
-            updateUI(); // To show final highscore if it changed
-            gameOverScreen.classList.remove('hidden');
-        }
-    }
-
-    function handleInput(laneIndex) {
-        if (!isPlaying) return;
-        
-        laneActiveUntil[laneIndex] = Date.now() + 100; // Visual feedback for 100ms
-
-        let bestNote = null;
-        let minDiff = Infinity;
-
-        for (const note of notes) {
-            if (note.lane === laneIndex && !note.hitStatus && !note.processed) {
-                const diff = Math.abs(elapsedTime - note.hitTime);
-                if (diff < MISS_TOLERANCE_MS * 1.5) { // Consider notes within a wider window for selection
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        bestNote = note;
-                    }
-                }
-            }
-        }
-
-        if (bestNote) {
-            let hitQuality = null;
-            if (minDiff < HIT_WINDOW_MS.PERFECT) hitQuality = 'PERFECT';
-            else if (minDiff < HIT_WINDOW_MS.GOOD) hitQuality = 'GOOD';
-            else if (minDiff < HIT_WINDOW_MS.OKAY) hitQuality = 'OKAY';
-
-            if (hitQuality) {
-                bestNote.hitStatus = hitQuality;
-                bestNote.processed = true;
-                combo++;
-                if (combo > maxComboInGame) maxComboInGame = combo;
-                
-                if (hitQuality === 'PERFECT') score += 100;
-                else if (hitQuality === 'GOOD') score += 50;
-                else if (hitQuality === 'OKAY') score += 25;
-                
-                playSound('hit', hitQuality === 'PERFECT');
-                showFeedbackDisplay(hitQuality, hitQuality);
-            } else { // Hit too early/late but a note was there
-                combo = 0;
-                playSound('miss');
-                showFeedbackDisplay('MISS', 'MISS_TIMING'); // Or "BAD"
-            }
-        } else { // Hit empty lane
-            // Optional: Penalize or just do nothing / small miss sound
-            // playSound('miss'); // Can be too noisy
-        }
-        updateUI();
-    }
-
-    // --- Drawing ---
-    const vpY = CANVAS_H * NOTE_VANISH_Y_RATIO;
-    const hitLineY = CANVAS_H * HIT_LINE_Y_RATIO;
-    const noteSpawnY = CANVAS_H * NOTE_SPAWN_Y_RATIO;
-
-    const totalWidthBottom = CANVAS_W * FRETBOARD_WIDTH_BOTTOM_RATIO;
-    const totalWidthTop = CANVAS_W * FRETBOARD_WIDTH_TOP_RATIO;
-    const fretboardOffsetXBottom = (CANVAS_W - totalWidthBottom) / 2;
-    const fretboardOffsetXTop = (CANVAS_W - totalWidthTop) / 2;
-
-    function drawLanes() {
-        ctx.save();
-        // Draw lane backgrounds (active state)
-        const now = Date.now();
-        for (let i = 0; i < NUM_LANES; i++) {
-            if (now < laneActiveUntil[i]) {
-                const xBotLeft = fretboardOffsetXBottom + (i / NUM_LANES) * totalWidthBottom;
-                const xBotRight = fretboardOffsetXBottom + ((i + 1) / NUM_LANES) * totalWidthBottom;
-                const xTopLeft = fretboardOffsetXTop + (i / NUM_LANES) * totalWidthTop;
-                const xTopRight = fretboardOffsetXTop + ((i + 1) / NUM_LANES) * totalWidthTop;
-
-                ctx.beginPath();
-                ctx.moveTo(xBotLeft, CANVAS_H); // Full bottom
-                ctx.lineTo(xBotRight, CANVAS_H);
-                ctx.lineTo(xTopRight, vpY);
-                ctx.lineTo(xTopLeft, vpY);
-                ctx.closePath();
-                ctx.fillStyle = LANE_ACTIVE_COLORS[i] + '33'; // translucent
-                ctx.fill();
-            }
-        }
-
-        // Draw lane dividers
-        ctx.lineWidth = 2;
-        for (let i = 0; i <= NUM_LANES; i++) {
-            const xBottom = fretboardOffsetXBottom + (i / NUM_LANES) * totalWidthBottom;
-            const xTop = fretboardOffsetXTop + (i / NUM_LANES) * totalWidthTop;
-            ctx.beginPath();
-            ctx.moveTo(xBottom, CANVAS_H); // Draw dividers to very bottom
-            ctx.lineTo(xTop, vpY);
-            ctx.strokeStyle = 'rgba(200, 200, 255, 0.2)';
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    function drawHitLine() {
-        ctx.beginPath();
-        ctx.moveTo(fretboardOffsetXBottom, hitLineY);
-        ctx.lineTo(fretboardOffsetXBottom + totalWidthBottom, hitLineY);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = 4;
-        ctx.shadowColor = "cyan";
-        ctx.shadowBlur = 8;
-        ctx.stroke();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-    }
-
-    function drawNotes() {
-        notes.sort((a,b) => a.yProgress - b.yProgress); // Draw distant notes first
-
-        for (const note of notes) {
-            if (note.processed || note.yProgress < 0 || note.yProgress > 1.2) continue; // Don't draw if hit or way off screen
-
-            const laneProgress = (note.lane + 0.5) / NUM_LANES;
-            const xBottom = fretboardOffsetXBottom + laneProgress * totalWidthBottom;
-            const xTop = fretboardOffsetXTop + laneProgress * totalWidthTop;
-            
-            const currentX = lerp(xTop, xBottom, note.yProgress);
-            const currentY = lerp(noteSpawnY, hitLineY, note.yProgress); // Visual spawn Y to hit line Y
-            const currentRadius = lerp(NOTE_RADIUS_MIN, NOTE_RADIUS_MAX, note.yProgress);
-
-            ctx.beginPath();
-            ctx.arc(currentX, currentY, currentRadius, 0, Math.PI * 2);
-            ctx.fillStyle = LANE_COLORS[note.lane];
-            ctx.fill();
-
-            // Inner highlight
-            ctx.beginPath();
-            ctx.arc(currentX, currentY, currentRadius * 0.6, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.fill();
-        }
-    }
-    
-    function drawGame() {
-        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-        drawLanes();
-        drawHitLine();
-        drawNotes();
-    }
-
-    function gameLoop() {
-        if (!isPlaying && notes.length === 0) { // Ensure loop stops if game ended abruptly
-            checkGameOver(); // Final check, could be redundant
-            return;
-        }
-        
-        elapsedTime = Date.now() - gameStartTime;
-        
-        spawnNotes();
-        updateNotePositions();
-        checkMissedNotes(); // Auto-miss notes that passed far beyond line
-        
-        drawGame();
-        
-        if (isPlaying) { // Only continue loop if game is active
-           animationFrameId = requestAnimationFrame(gameLoop);
-        }
-        checkGameOver(); // Check if song ended
-    }
-
-    // --- Event Listeners ---
-    startButton.addEventListener('click', startGame);
-    restartButton.addEventListener('click', () => {
-        gameOverScreen.classList.add('hidden');
-        startScreen.classList.remove('hidden');
-        resetGameState(); // Reset state when going back to start screen
-    });
-
-    window.addEventListener('keydown', (e) => {
-        if (!isPlaying || e.repeat) return;
-        const keyIndex = KEY_MAPPING.indexOf(e.key.toLowerCase());
-        if (keyIndex !== -1) {
-            e.preventDefault();
-            handleInput(keyIndex);
-        }
-    });
-
-    canvas.addEventListener('touchstart', (e) => {
-        if (!isPlaying) return;
-        e.preventDefault();
-        initAudio(); // Ensure audio context on touch
-        const rect = canvas.getBoundingClientRect();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            const touch = e.changedTouches[i];
-            const touchX = touch.clientX - rect.left;
-            const touchY = touch.clientY - rect.top;
-
-            // Define touchable regions based on styled canvas size
-            const styleWidth = canvas.clientWidth; 
-            const styleHeight = canvas.clientHeight;
-
-            // Check if touch is in the lower part of the canvas (hit area)
-            if (touchY > styleHeight * (HIT_LINE_Y_RATIO - 0.2) ) { // Generous vertical hit area
-                 // Map touchX from styled coords to logical coords for lane calculation
-                const logicalTouchX = touchX * (CANVAS_W / styleWidth);
-                
-                const laneWidth = totalWidthBottom / NUM_LANES;
-                // Calculate lane based on fretboard, not full canvas width
-                if (logicalTouchX >= fretboardOffsetXBottom && logicalTouchX <= fretboardOffsetXBottom + totalWidthBottom) {
-                    const xInFretboard = logicalTouchX - fretboardOffsetXBottom;
-                    const laneIndex = Math.floor(xInFretboard / laneWidth);
-                    if (laneIndex >= 0 && laneIndex < NUM_LANES) {
-                         handleInput(laneIndex);
-                    }
-                }
-            }
-        }
-    }, { passive: false });
-    
-    // Initialize
-    resetGameState(); // Set initial scores and prepare chart for the first game
-    updateUI(); // Show initial highscore
-    // Game starts on button click
-    </script>
 </body>
 </html>

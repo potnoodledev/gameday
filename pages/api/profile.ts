@@ -42,7 +42,7 @@ export default async function handler(
 
     try {
       const result = await pool.query(
-        'SELECT wallet_address, email, image_url, created_at, updated_at, profile_picture_data FROM user_profiles WHERE wallet_address = $1',
+        'SELECT wallet_address, email, username, image_url, created_at, updated_at, profile_picture_data FROM user_profiles WHERE wallet_address = $1',
         [walletAddress]
       );
 
@@ -71,6 +71,7 @@ export default async function handler(
       
       const walletAddress = Array.isArray(fields.walletAddress) ? fields.walletAddress[0] : fields.walletAddress;
       const email = Array.isArray(fields.email) ? fields.email[0] : fields.email;
+      const username = Array.isArray(fields.username) ? fields.username[0] : fields.username;
       // imageUrl from form data is for users providing a URL string, not for file upload
       const imageUrl = Array.isArray(fields.imageUrl) ? fields.imageUrl[0] : fields.imageUrl;
 
@@ -81,6 +82,12 @@ export default async function handler(
       }
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Invalid email format' });
+      }
+      if (username && (username.length < 3 || username.length > 50)) {
+        return res.status(400).json({ error: 'Username must be between 3 and 50 characters.' });
+      }
+      if (username && !/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores.' });
       }
       if (imageUrl && !/^https?:\/\/.+\.[^\s@]+/.test(imageUrl)) {
         return res.status(400).json({ error: 'Invalid image URL format' });
@@ -98,30 +105,32 @@ export default async function handler(
       if (profilePictureData) {
         // If a file is uploaded, prioritize it and nullify image_url
         upsertQuery = `
-          INSERT INTO user_profiles (wallet_address, email, image_url, profile_picture_data)
-          VALUES ($1, $2, NULL, $3)
+          INSERT INTO user_profiles (wallet_address, email, username, image_url, profile_picture_data)
+          VALUES ($1, $2, $3, NULL, $4)
           ON CONFLICT (wallet_address) 
           DO UPDATE SET 
-            email = COALESCE($2, user_profiles.email),
+            email = COALESCE(EXCLUDED.email, user_profiles.email),
+            username = COALESCE(EXCLUDED.username, user_profiles.username),
             image_url = NULL,
-            profile_picture_data = $3,
+            profile_picture_data = EXCLUDED.profile_picture_data,
             updated_at = NOW()
-          RETURNING wallet_address, email, image_url, created_at, updated_at, profile_picture_data;
+          RETURNING wallet_address, email, username, image_url, created_at, updated_at, profile_picture_data;
         `;
-        queryParams.push(walletAddress, email || null, profilePictureData);
+        queryParams.push(walletAddress, email || null, username || null, profilePictureData);
       } else {
-        // No new file uploaded, update email and potentially imageUrl (if provided as text)
+        // No new file uploaded, update email, username and potentially imageUrl (if provided as text)
         upsertQuery = `
-          INSERT INTO user_profiles (wallet_address, email, image_url)
-          VALUES ($1, $2, $3)
+          INSERT INTO user_profiles (wallet_address, email, username, image_url)
+          VALUES ($1, $2, $3, $4)
           ON CONFLICT (wallet_address) 
           DO UPDATE SET 
-            email = COALESCE($2, user_profiles.email),
-            image_url = COALESCE($3, user_profiles.image_url),
+            email = COALESCE(EXCLUDED.email, user_profiles.email),
+            username = COALESCE(EXCLUDED.username, user_profiles.username),
+            image_url = COALESCE(EXCLUDED.image_url, user_profiles.image_url),
             updated_at = NOW()
-          RETURNING wallet_address, email, image_url, created_at, updated_at;
+          RETURNING wallet_address, email, username, image_url, created_at, updated_at;
         `;
-        queryParams.push(walletAddress, email || null, imageUrl || null);
+        queryParams.push(walletAddress, email || null, username || null, imageUrl || null);
       }
       
       const result = await pool.query(upsertQuery, queryParams);
@@ -139,6 +148,9 @@ export default async function handler(
 
     } catch (error: any) {
       console.error('Error saving profile (formidable):', error);
+      if (error.code === '23505' && error.constraint === 'user_profiles_username_key') {
+        return res.status(409).json({ error: 'Username is already taken. Please choose a different one.' });
+      }
       res.status(500).json({ error: 'Internal server error while saving profile', details: error.message });
     }
   } else {

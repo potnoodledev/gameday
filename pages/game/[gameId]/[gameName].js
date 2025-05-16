@@ -88,7 +88,11 @@ const GameDisplayPage = () => {
   const pageTitle = `${gameData.game_name || 'Game'} | Noods.cc`;
 
   return (
-    <Layout currentGameIdFromProp={null}> {/* Or pass gameId if Layout needs it */}
+    <Layout 
+      currentGameIdFromProp={gameId ? String(gameId) : null} // Pass the actual gameId
+      currentGameHtmlForEditor={gameData?.html_content} // Pass HTML content to Layout
+      currentSavedGameName={gameData?.game_name} // Pass current game's name
+    >
       <Head>
         <title>{pageTitle}</title>
         <meta name="description" content={`Play ${gameData.game_name} on Noods.cc`} />
