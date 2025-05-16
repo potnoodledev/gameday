@@ -9,29 +9,34 @@ export default async function handler(req, res) {
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { prompt, model, currentCode } = req.body;
+  // Read MODEL_PROVIDER from environment variables
+  let modelProviderFromEnv = process.env.MODEL_PROVIDER?.toLowerCase();
+
+  // get verbose logging from environment variable, if not set default to false
+  const verboseLogging = process.env.LLM_VERBOSE_LOGGING?.toLowerCase() === 'true';
+
+  if (!modelProviderFromEnv || (modelProviderFromEnv !== 'openai' && modelProviderFromEnv !== 'gemini')) {
+    console.warn(`Warning: MODEL_PROVIDER environment variable is not set or is invalid ('${process.env.MODEL_PROVIDER}'). Defaulting to 'openai'. Valid values are 'openai' or 'gemini'.`);
+    modelProviderFromEnv = 'openai'; // Default to OpenAI if not set or invalid
+  }
+
+  const { prompt, currentCode } = req.body;
 
   if (!prompt) {
     return res.status(400).json({ error: 'Missing prompt' });
   }
-  if (!model) {
-    return res.status(400).json({ error: 'Missing model selection' });
-  }
 
-  // Construct messages array (OpenAI format)
-  // The old server.js code expected `messages` in the body for OpenAI/Gemini routes.
-  // Here, we construct it based on `prompt` and `currentCode`.
   const messages = [
     { 
       role: 'system', 
-      content: model === 'gemini' 
+      content: modelProviderFromEnv === 'gemini' 
         ? SYSTEM_INSTRUCTIONS_GEMINI 
         : `You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascrip alerts. Do not include explanations, only output the HTML. If existing code is provided, modify it to implement the request, otherwise create a new game from scratch. Current code:\n\n${currentCode || ''}`
     },
     { role: 'user', content: prompt }
   ];
 
-  if (model === 'openai') {
+  if (modelProviderFromEnv === 'openai') {
     try {
       const openaiApiKey = process.env.OPENAI_API_KEY;
       if (!openaiApiKey) {
@@ -60,17 +65,16 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
 
-      console.log("OpenAI: Starting stream processing.");
+      if (verboseLogging) console.log("OpenAI: Starting stream processing.");
       let contentGenerated = false;
-      let doneProcessing = false; // Flag to signal completion
+      let doneProcessing = false;
 
-      // Check if response.body is a Node.js Readable stream
-      if (typeof response.body.on === 'function') { // Node.js stream
+      if (typeof response.body.on === 'function') {
         let buffer = "";
         response.body.on('data', (chunk) => {
-          if (doneProcessing) return; // Stop processing if [DONE] was received
-          const decodedChunk = chunk.toString(); // Convert Buffer to string
-          console.log(`OpenAI: Received raw data chunk: ${decodedChunk.substring(0,50)}...`);
+          if (doneProcessing) return;
+          const decodedChunk = chunk.toString();
+          if (verboseLogging) console.log(`OpenAI: Received raw data chunk: ${decodedChunk.substring(0,50)}...`);
           buffer += decodedChunk;
           let eolIndex;
           while ((eolIndex = buffer.indexOf('\n')) >= 0) {
@@ -81,23 +85,22 @@ export default async function handler(req, res) {
             if (line.startsWith("data: ")) {
               const dataJson = line.substring(5).trim();
               if (dataJson === "[DONE]") {
-                console.log("OpenAI: Received [DONE] message.");
+                if (verboseLogging) console.log("OpenAI: Received [DONE] message.");
                 contentGenerated = true;
-                doneProcessing = true; // Signal to stop processing further chunks
+                doneProcessing = true;
                 break; 
               }
               try {
                 const parsed = JSON.parse(dataJson);
                 if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                   const textPart = parsed.choices[0].delta.content;
-                  console.log(`OpenAI: Writing part to response: ${textPart.substring(0, 30)}...`);
+                  if (verboseLogging) console.log(`OpenAI: Writing part to response: ${textPart.substring(0, 30)}...`);
                   res.write(textPart);
                   contentGenerated = true;
                 }
                 if (parsed.choices && parsed.choices[0] && parsed.choices[0].finish_reason) {
-                  console.log(`OpenAI: Stream finished due to finish_reason: ${parsed.choices[0].finish_reason}`);
+                  if (verboseLogging) console.log(`OpenAI: Stream finished due to finish_reason: ${parsed.choices[0].finish_reason}`);
                   contentGenerated = true;
-                  // doneProcessing = true; // [DONE] is the primary signal
                 }
               } catch (e) {
                 console.error("OpenAI: Error parsing stream data JSON:", e, "Data:", dataJson);
@@ -107,49 +110,42 @@ export default async function handler(req, res) {
         });
 
         response.body.on('end', () => {
-          console.log("OpenAI: Stream ended.");
+          if (verboseLogging) console.log("OpenAI: Stream ended.");
           if (!contentGenerated && !res.headersSent && !doneProcessing) {
             console.error("OpenAI: Stream ended, but no content was marked as generated and [DONE] not seen.");
-            // It's tricky to send a JSON error here as headers might be sent for an empty stream
-            // or an error might have occurred mid-stream but not caught by 'error' handler below.
-            // The client will likely timeout or receive an empty response.
           }
-          console.log("OpenAI: Finished stream processing (on end event).");
+          if (verboseLogging) console.log("OpenAI: Finished stream processing (on end event).");
           if (!res.writableEnded) {
-            res.end(); // End the stream to our client
+            res.end();
           }
         });
 
         response.body.on('error', (err) => {
           console.error('OpenAI: Error during stream:', err);
-          doneProcessing = true; // Stop further processing on error
+          doneProcessing = true;
           if (!res.headersSent) {
             res.status(500).json({ error: `OpenAI stream error: ${err.message}` });
           } else if (!res.writableEnded) {
-            res.end(); // Ensure stream to client is closed
+            res.end();
           }
         });
 
       } else {
-        // Fallback if response.body is not a Node.js stream (should not happen in API routes)
         console.error("OpenAI: response.body is not a Node.js Readable stream.");
         if (!res.headersSent) {
             return res.status(500).json({ error: 'OpenAI response body was not a Node.js stream as expected.' });
         }
         if (!res.writableEnded) res.end();
       }
-      // Note: res.end() is now primarily called in the 'end' event of response.body
-      // or in error conditions. We don't call it immediately after setting up listeners.
 
     } catch (err) {
       console.error('Error calling OpenAI API:', err);
       res.status(500).json({ error: err.message || 'Internal Server Error' });
     }
-  } else if (model === 'gemini') {
+  } else if (modelProviderFromEnv === 'gemini') {
     try {
       const geminiApiKey = process.env.GEMINI_API_KEY;
       if (!geminiApiKey) {
-        // Ensure we don't set headers if we're about to send JSON error
         return res.status(500).json({ error: 'Gemini API key not configured on server' });
       }
       const { GoogleGenAI } = await import('@google/genai'); 
@@ -169,12 +165,9 @@ export default async function handler(req, res) {
         parts: [{ text: prompt }]
       });
 
-      // Set headers for streaming plain text
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      // For some environments like Nginx, to prevent buffering:
-      // res.setHeader('X-Accel-Buffering', 'no');
 
       const streamResult = await ai.models.generateContentStream({ 
         model: "gemini-2.5-pro-preview-05-06",
@@ -182,17 +175,17 @@ export default async function handler(req, res) {
       });
       
       let contentGenerated = false;
-      console.log("Gemini: Starting stream processing.");
+      if (verboseLogging) console.log("Gemini: Starting stream processing.");
 
       if (streamResult && streamResult.stream && typeof streamResult.stream[Symbol.asyncIterator] === 'function') {
         for await (const chunk of streamResult.stream) {
-          console.log("Gemini: Received chunk from SDK (via streamResult.stream).");
+          if (verboseLogging) console.log("Gemini: Received chunk from SDK (via streamResult.stream).");
           if (chunk && chunk.candidates && chunk.candidates[0] && 
               chunk.candidates[0].content && chunk.candidates[0].content.parts && 
               Array.isArray(chunk.candidates[0].content.parts)) {
             for (const part of chunk.candidates[0].content.parts) {
               if (part.text && typeof part.text === 'string') {
-                console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
+                if (verboseLogging) console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
                 res.write(part.text);
                 contentGenerated = true;
               }
@@ -200,14 +193,14 @@ export default async function handler(req, res) {
           }
         }
       } else if (streamResult && typeof streamResult[Symbol.asyncIterator] === 'function') {
-        for await (const chunk of streamResult) { // chunk is a GenerateContentResponse
-          console.log("Gemini: Received chunk from SDK (via direct iteration).");
+        for await (const chunk of streamResult) {
+          if (verboseLogging) console.log("Gemini: Received chunk from SDK (via direct iteration).");
           if (chunk && chunk.candidates && chunk.candidates[0] && 
               chunk.candidates[0].content && chunk.candidates[0].content.parts && 
               Array.isArray(chunk.candidates[0].content.parts)) {
             for (const part of chunk.candidates[0].content.parts) {
               if (part.text && typeof part.text === 'string') {
-                console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
+                if (verboseLogging) console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
                 res.write(part.text);
                 contentGenerated = true;
               }
@@ -215,14 +208,13 @@ export default async function handler(req, res) {
           }
         }
       } else {
-        // Fallback: streamResult is not iterable, try to process it as a single complete response.
-        console.log("Gemini: Stream result not iterable, attempting to process as single response.");
+        if (verboseLogging) console.log("Gemini: Stream result not iterable, attempting to process as single response.");
         if (streamResult && streamResult.candidates && streamResult.candidates[0] && 
             streamResult.candidates[0].content && streamResult.candidates[0].content.parts && 
             Array.isArray(streamResult.candidates[0].content.parts)) {
           for (const part of streamResult.candidates[0].content.parts) {
             if (part.text && typeof part.text === 'string') {
-              console.log(`Gemini: Writing part to response (single): ${part.text.substring(0, 30)}...`);
+              if (verboseLogging) console.log(`Gemini: Writing part to response (single): ${part.text.substring(0, 30)}...`);
               res.write(part.text);
               contentGenerated = true;
             }
@@ -233,26 +225,26 @@ export default async function handler(req, res) {
       }
 
       if (!contentGenerated && !res.headersSent) {
-          // This should ideally not be hit. If it is, something went wrong before streaming started.
           console.error("Gemini: No content generated for stream, and headers not sent.");
           return res.status(500).json({ error: 'Gemini processed, but no content generated or extracted for stream.' });
       }
       
-      console.log("Gemini: Finished stream processing.");
-      res.end(); // End the stream
+      if (verboseLogging) console.log("Gemini: Finished stream processing.");
+      res.end();
 
     } catch (err) {
       console.error('Error calling Gemini API:', err);
-      if (!res.headersSent) { // Only send JSON error if headers haven't been set for streaming
+      if (!res.headersSent) {
         if (err.message && err.message.includes('API key not valid')) {
           return res.status(401).json({ error: 'Gemini API key not valid. Please check your configuration.'});
         }
-        return res.status(500).json({ error: err.message || 'Internal Server Error calling Gemini' });
+        return res.status(500).json({ error: err.message || 'Internal ServerError calling Gemini' });
       }
-      // If headers were sent, the stream will just end, possibly abruptly.
-      res.end(); // Ensure response is ended.
+      res.end();
     }
   } else {
-    res.status(400).json({ error: 'Invalid model selected' });
+    // This case should ideally not be reached due to the default modelProviderFromEnv setting
+    console.error(`Invalid modelProviderFromEnv after defaulting: ${modelProviderFromEnv}`);
+    res.status(500).json({ error: 'Internal server error: Invalid model provider configured after default.' });
   }
 } 

@@ -29,7 +29,6 @@ export default function Layout({ children, currentGameIdFromProp }) {
   const closeLiveGameEditorRef = useRef(null);
   const llmChatHistoryRef = useRef(null);
   const llmChatFormRef = useRef(null);
-  const llmModelSelectRef = useRef(null);
   const llmChatInputRef = useRef(null);
   const publishLiveGameBtnRef = useRef(null);
   const liveGamePreviewRef = useRef(null);
@@ -105,7 +104,6 @@ export default function Layout({ children, currentGameIdFromProp }) {
     const closeLiveGameEditor = closeLiveGameEditorRef.current;
     const llmChatHistory = llmChatHistoryRef.current;
     const llmChatForm = llmChatFormRef.current;
-    const llmModelSelect = llmModelSelectRef.current;
     const llmChatInput = llmChatInputRef.current;
     const publishLiveGameBtn = publishLiveGameBtnRef.current;
     const liveGamePreview = liveGamePreviewRef.current;
@@ -261,118 +259,115 @@ export default function Layout({ children, currentGameIdFromProp }) {
         if (liveGameEditorModal) liveGameEditorModal.style.display = 'none';
     };
     
-    if (llmChatForm) llmChatForm.onsubmit = async (e) => {
+    if (llmChatForm && llmChatHistory && llmChatInput && liveGamePreviewRef.current) {
+      llmChatForm.onsubmit = async (e) => {
         e.preventDefault();
-        if (!llmChatInput || !llmChatHistory || !llmModelSelect) return;
-        const message = llmChatInput.value;
-        const model = llmModelSelect.value;
-        if (!message) return;
-        llmChatInput.value = '';
-        const userMsgDiv = document.createElement('div');
-        userMsgDiv.textContent = `You: ${message}`;
-        llmChatHistory.appendChild(userMsgDiv);
+        const userMessage = llmChatInput.value.trim();
+        if (!userMessage) return;
 
-        // Create assistant message div and pre element for AI response
-        const assistantMsgDiv = document.createElement('div');
-        assistantMsgDiv.appendChild(document.createTextNode('AI: '));
-        const preElement = document.createElement('pre');
-        preElement.style.whiteSpace = 'pre-wrap';
-        preElement.style.wordWrap = 'break-word';
-        preElement.textContent = "generating code..."; // Initial placeholder message
-        assistantMsgDiv.appendChild(preElement);
-        llmChatHistory.appendChild(assistantMsgDiv);
-        llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Scroll to show placeholder
+        const userMsgDiv = document.createElement('div');
+        userMsgDiv.className = 'mb-2 p-2 bg-blue-600 rounded-lg self-end text-right';
+        userMsgDiv.textContent = `You: ${userMessage}`;
+        llmChatHistory.appendChild(userMsgDiv);
+        llmChatInput.value = '';
+
+        const aiMsgDiv = document.createElement('div');
+        aiMsgDiv.className = 'mb-2 p-2 bg-gray-700 rounded-lg self-start relative group';
+        const aiPre = document.createElement('pre');
+        aiPre.className = 'whitespace-pre-wrap break-words';
+        aiPre.textContent = 'AI: generating code...';
+        aiMsgDiv.appendChild(aiPre);
+        llmChatHistory.appendChild(aiMsgDiv);
+        llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+
+        let accumulatedCode = "";
 
         try {
-            let accumulatedCode = ""; // Declare accumulatedCode at the top of the try block
+          const response = await fetch('/api/generate-game-update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: userMessage,
+              currentCode: liveGamePreviewRef.current.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '<!-- Start coding here -->',
+            }),
+          });
 
-            const response = await fetch('/api/generate-game-update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: message, model: model, currentCode: localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '' })
-            });
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('text/plain')) {
+            // Streaming plaintext response
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            aiPre.textContent = ""; // Clear placeholder
+            let firstChunk = true;
 
-            if (!response.ok) {
-                // Try to get error message from body if server sent one
-                const errorData = await response.json().catch(() => ({ message: `Server error: ${response.status}` }));
-                throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunkText = decoder.decode(value); 
+              if (firstChunk) {
+                firstChunk = false;
+              }
+              aiPre.textContent += chunkText; 
+              accumulatedCode += chunkText;
+              llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
             }
-            
-            const contentType = response.headers.get("Content-Type");
+            // After stream is complete, final accumulatedCode is ready
 
-            if (contentType && contentType.includes("text/plain")) { // Gemini or OpenAI streams plain text
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                preElement.textContent = ""; // Clear placeholder for streaming content
-                let firstChunk = true;
-
-                // eslint-disable-next-line no-constant-condition
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const chunkText = decoder.decode(value); 
-                    if (firstChunk) {
-                        // preElement.textContent = chunkText; // Overwrite if it was a placeholder
-                        firstChunk = false;
-                    } // Not strictly needed as we cleared above, but good for clarity if clearing was conditional
-                    preElement.textContent += chunkText; 
-                    accumulatedCode += chunkText;
-                    llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Keep scrolling
-                }
-            } else if (contentType && contentType.includes("application/json")) { // Fallback or non-streamed JSON
-                const data = await response.json();
-                if (data.newCode) {
-                    preElement.textContent = data.newCode; // Replace placeholder
-                    accumulatedCode = data.newCode;
-                } else if (data.error) {
-                    preElement.textContent = data.error; // Replace placeholder with error
-                    throw new Error(data.error);
-                } else {
-                    preElement.textContent = 'No response content from AI (JSON).'; // Replace placeholder
-                    throw new Error('No response content from AI (JSON).');
-                }
-            } else {
-                // Fallback for unexpected content type
-                const textResponse = await response.text();
-                preElement.textContent = `Unexpected response type: ${contentType}\n${textResponse}`; // Replace placeholder
-                throw new Error(`Unexpected response type: ${contentType}`);
+          } else if (contentType && contentType.includes('application/json')) {
+            // Non-streaming JSON response (OpenAI non-stream or error objects)
+            const responseText = await response.text(); // Read as text first to avoid parsing errors on empty/malformed body
+            if (!responseText) {
+                throw new Error('AI returned an empty JSON response.');
             }
-            
-            llmChatHistory.scrollTop = llmChatHistory.scrollHeight; // Final scroll
-
-            // Process accumulatedCode for preview and storage (only if content was generated)
-            if (accumulatedCode.trim()) {
-                // Clean the accumulated code once (remove ```html markers)
-                const finalCode = accumulatedCode.replace(/^```html\s*/, '').replace(/```$/, '').trim();
-                
-                if (finalCode) { // Ensure finalCode is not empty after stripping
-                    if (liveGamePreviewRef.current) {
-                        liveGamePreviewRef.current.srcdoc = finalCode;
+            try {
+                const data = JSON.parse(responseText);
+                if (response.ok) {
+                    if (data.newCode) {
+                        aiPre.textContent = data.newCode;
+                        accumulatedCode = data.newCode;
+                    } else {
+                        throw new Error('AI response did not contain newCode.');
                     }
-                    localStorage.setItem(LIVE_GAME_DRAFT_KEY, finalCode);
+                } else {
+                    throw new Error(data.error || 'Unknown error from AI (JSON)');
                 }
-            } else if (!preElement.textContent.toLowerCase().includes('error')) {
-                 // If accumulatedCode is empty but no explicit error was shown in preElement
-                 preElement.textContent += (preElement.textContent ? '\n' : '') + "(AI generated empty content)";
+            } catch (parseError) {
+                // If JSON parsing fails, treat the responseText as a potential error message
+                throw new Error(`Failed to parse AI JSON response: ${parseError.message}. Response was: ${responseText}`);
             }
+          } else {
+            const textResponse = await response.text();
+            aiPre.textContent = `Unexpected response type: ${contentType}\n${textResponse}`;
+            throw new Error(`Unexpected response type: ${contentType}`);
+          }
+
+          // Common logic after successful response (streamed or JSON)
+          if (accumulatedCode && liveGamePreviewRef.current) {
+            liveGamePreviewRef.current.srcdoc = accumulatedCode;
+            localStorage.setItem(LIVE_GAME_DRAFT_KEY, accumulatedCode);
+          } else if (!aiPre.textContent.toLowerCase().includes('error') && !accumulatedCode) {
+            aiPre.textContent += (aiPre.textContent ? '\n' : '') + "(AI generated empty content)";
+          }
 
         } catch (error) {
-            console.error('Error calling LLM API:', error);
-            // Ensure the preElement (which might say "generating code...") is updated with the error
-            if (preElement) { // preElement should exist if we got this far
-                preElement.textContent = `Error: ${error.message}`;
-                preElement.style.color = 'red'; // Make error more visible
-            } else { // Fallback if preElement wasn't created (shouldn't happen)
-                const errorMsgDiv = document.createElement('div');
-                errorMsgDiv.textContent = `Error: ${error.message}`;
-                errorMsgDiv.style.color = 'red';
-                llmChatHistory.appendChild(errorMsgDiv);
-            }
-            llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+          console.error('Error calling LLM API:', error);
+          if (aiPre) {
+            aiPre.textContent = `Error: ${error.message}`;
+            aiPre.style.color = 'red';
+          } else {
+            const errorMsgDiv = document.createElement('div');
+            errorMsgDiv.textContent = `Error: ${error.message}`;
+            errorMsgDiv.style.color = 'red';
+            llmChatHistory.appendChild(errorMsgDiv);
+          }
+          llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
         }
-    };
+      };
+    }
 
-    if (publishLiveGameBtn) publishLiveGameBtn.onclick = async () => {
+    if (publishLiveGameBtn && liveGamePreviewRef.current) publishLiveGameBtn.onclick = async () => {
         const newCode = localStorage.getItem(LIVE_GAME_DRAFT_KEY);
         if (!newCode) { alert('No draft to publish.'); return; }
         try {
@@ -417,6 +412,12 @@ export default function Layout({ children, currentGameIdFromProp }) {
         gameFrameRef.current.onload = sendPlayerNameToGame;
     }
     // END RESTORED
+
+    if (liveGameEditorModal) {
+      // Remove the radio button group for model selection
+      const modelSelectionRadios = liveGameEditorModal.querySelectorAll('.model-selection-radios');
+      modelSelectionRadios.forEach(radioGroup => radioGroup.remove());
+    }
 
     return () => {
       window.removeEventListener('message', handleWindowMessage);
@@ -480,10 +481,6 @@ export default function Layout({ children, currentGameIdFromProp }) {
           <div className="text-2xl font-bold text-pink-600 mb-2">Chat to Build Live Game</div>
           <div id="llmChatHistory" ref={llmChatHistoryRef} className="flex-1 min-h-[180px] max-h-64 overflow-y-auto bg-pink-50 rounded p-3 mb-2 text-gray-900 text-sm font-mono"></div>
           <form id="llmChatForm" ref={llmChatFormRef} className="flex gap-2 items-center mt-2">
-            <select id="llmModelSelect" ref={llmModelSelectRef} className="rounded border border-pink-300 p-2 text-gray-900 bg-white font-mono">
-              <option value="openai">OpenAI</option>
-              <option value="gemini">Gemini</option>
-            </select>
             <input id="llmChatInput" ref={llmChatInputRef} className="flex-1 rounded border border-pink-300 p-2 text-gray-900 bg-white" placeholder="Describe the game or change you want..." autoComplete="off" />
             <button type="submit" className="px-4 py-2 bg-pink-500 text-white rounded-lg font-bold shadow hover:bg-pink-700 transition">Send</button>
             <button type="button" id="publishLiveGameBtn" ref={publishLiveGameBtnRef} className="px-4 py-2 bg-green-500 text-white rounded-lg font-bold shadow hover:bg-green-700 transition">Publish</button>

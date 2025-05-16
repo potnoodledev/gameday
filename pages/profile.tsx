@@ -131,6 +131,12 @@ const ProfilePage = () => {
 
       <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center pt-20 p-4">
         <div className="w-full max-w-2xl bg-gray-800 p-8 rounded-xl shadow-2xl">
+          <button 
+            onClick={() => router.back()}
+            className="absolute top-4 left-4 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-150 ease-in-out text-sm"
+          >
+            &larr; Back
+          </button>
           <h1 className="text-3xl font-bold mb-8 text-pink-400 text-center">Your Profile</h1>
           
           {profile?.image_url && (
