@@ -715,7 +715,24 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
         </nav>
       </header>
 
-      {children} {/* Page specific content will be rendered here */}
+      {/* Main content area: full screen height, scrolls internally, content starts below fixed header. Added bg-slate-900 */}
+      <main className="w-full h-screen overflow-y-auto pt-20 bg-slate-900">
+        {children} {/* Page specific content will be rendered here */}
+
+        <footer className="w-full bg-slate-900 text-slate-400 text-sm py-8 px-4 sm:px-6 lg:px-8 border-t border-slate-700 mt-12">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+            <p>&copy; {new Date().getFullYear()} Noods.cc - All mischief managed.</p>
+            <div className="flex space-x-6">
+              <a href="https://npcday.substack.com" target="_blank" rel="noopener noreferrer" className="hover:text-pink-400 transition-colors">
+                NPC Day Substack
+              </a>
+              <a href="https://engine.cosmiclabs.org" target="_blank" rel="noopener noreferrer" className="hover:text-sky-400 transition-colors">
+                Cosmic Engine
+              </a>
+            </div>
+          </div>
+        </footer>
+      </main>
 
       <iframe id="gameFrame" ref={gameFrameRef} className="game-iframe" allowFullScreen style={{display:'none'}}></iframe>
       

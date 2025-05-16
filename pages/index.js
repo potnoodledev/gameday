@@ -162,8 +162,8 @@ export default function UserGameListPage() {
         <title>Game Hub | Noods.cc</title>
         <meta name="description" content="Your games and community games on Noods.cc" />
       </Head>
-      <div className="min-h-screen bg-slate-900 py-8 px-4 sm:px-6 lg:px-8 text-slate-100 pt-20 md:pt-24">
-        <div className="max-w-7xl mx-auto h-full">
+      <div className="bg-slate-900 pb-8 px-4 sm:px-6 lg:px-8 text-slate-100">
+        <div className="max-w-7xl mx-auto">
           <header className="mb-10 text-center">
             <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-sky-500 pb-2">
               Noods.cc Game Hub
@@ -173,8 +173,10 @@ export default function UserGameListPage() {
             </p>
           </header>
 
-          <div className="flex flex-col md:flex-row md:space-x-8 lg:space-x-12 md:h-[calc(100vh-10rem-3.5rem)]">
-            <aside className="w-full md:w-1/3 lg:w-1/4 mb-8 md:mb-0 md:sticky md:top-24 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto">
+          {/* Container for the two columns. */}
+          <div className="flex flex-col md:flex-row md:space-x-8 lg:space-x-12">
+            {/* Aside (Tweet card) - Restored visibility for mobile (w-full, mb-8) */}
+            <aside className="w-full md:w-1/3 lg:w-1/4 mb-8 md:mb-0 md:sticky md:top-[92px] md:max-h-[calc(100vh-116px)] md:overflow-y-auto">
               <div className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-800 shadow-lg">
                 <div className="flex items-start mb-2.5">
                   <div className="w-10 h-10 rounded-full mr-2.5 bg-pink-500 flex-shrink-0"><img src="/potnoodledev.jpg" alt="PotNoodleDev" className="w-10 h-10 rounded-full object-cover"/></div>
@@ -215,7 +217,8 @@ export default function UserGameListPage() {
               </div>
             </aside>
 
-            <main className="w-full md:w-2/3 lg:w-3/4 md:overflow-y-auto md:h-full">
+            {/* Main content area for games, make this scrollable independently */}
+            <main className="w-full md:w-2/3 lg:w-3/4 md:max-h-[calc(100vh-92px)] md:overflow-y-auto">
               {connected && (
                 <section className="mb-16">
                   <h2 className="text-3xl font-semibold text-pink-400 mb-6 border-b-2 border-pink-400/50 pb-3">
