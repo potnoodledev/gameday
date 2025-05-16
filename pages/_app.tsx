@@ -6,7 +6,7 @@ import '../styles/globals.css'; // Import global styles from the original index.
 import { ChakraProvider } from "@chakra-ui/react";
 import WalletContextProvider from "../contexts/WalletContextProvider";
 import SessionProvider from "../contexts/SessionProvider"; // Adjusted path
-import { GameStateProvider } from "../contexts/GameStateProvider"; // Adjusted path
+// import { GameStateProvider } from "../contexts/GameStateProvider"; // Adjusted path
 import { NftProvider } from "../contexts/NftProvider"; // Adjusted path
 
 function MyApp({ Component, pageProps }: AppProps) {
@@ -14,11 +14,11 @@ function MyApp({ Component, pageProps }: AppProps) {
     <ChakraProvider>
       <WalletContextProvider>
         <SessionProvider>
-          <GameStateProvider>
+          {/* <GameStateProvider> */}
             <NftProvider>
               <Component {...pageProps} />
             </NftProvider>
-          </GameStateProvider>
+          {/* </GameStateProvider> */}
         </SessionProvider>
       </WalletContextProvider>
     </ChakraProvider>
