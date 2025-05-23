@@ -35,6 +35,13 @@ const createSlug = (name) => {
     .replace(/-+$/, ''); // Trim hyphen from end of text
 };
 
+// Add this utility function near the top of the file, after the imports
+const truncateWalletAddress = (address) => {
+  if (!address) return '';
+  if (address.length <= 12) return address; // Don't truncate if already short
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+};
+
 // Updated GameList component for better UX and creator info
 const GameList = ({ games, onGameSelect, isMyGames = false }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
@@ -68,7 +75,7 @@ const GameList = ({ games, onGameSelect, isMyGames = false }) => (
               )}
               <div>
                 <span className="text-slate-500">Creator: </span>
-                <span className="font-medium text-sky-400 hover:text-sky-300 transition-colors">{game.userName}</span>
+                <span className="font-medium text-sky-400 hover:text-sky-300 transition-colors">{truncateWalletAddress(game.userName)}</span>
               </div>
             </div>
           )}

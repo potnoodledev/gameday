@@ -28,6 +28,7 @@ exports.up = (pgm) => {
     },
     game_name: { type: 'VARCHAR(255)' }, // Optional: if games have names/titles
     html_content: { type: 'TEXT', notNull: true }, // For storing the game's HTML content
+    username: { type: 'VARCHAR(255)', notNull: true }, // Added username column
     created_at: {
       type: 'TIMESTAMP WITH TIME ZONE',
       notNull: true,

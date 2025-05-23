@@ -6,6 +6,7 @@ type SaveGameRequestBody = {
   walletAddress: string;
   gameName: string;
   htmlContent: string;
+  username: string;
   // Add any other expected fields, e.g., description, thumbnail_url
 };
 
@@ -45,39 +46,42 @@ export default async function handler(
 ) {
   if (req.method === 'POST') {
     try {
-      const { walletAddress, gameName, htmlContent } = req.body as SaveGameRequestBody;
+      const { walletAddress, gameName, htmlContent, username } = req.body as SaveGameRequestBody;
 
       if (!walletAddress || !gameName || !htmlContent) {
         return res.status(400).json({ message: 'Missing required fields: walletAddress, gameName, and htmlContent are required.' });
       }
 
-      // --- DATABASE LOGIC --- 
-      // We will use an "UPSERT" operation: 
-      // - Insert a new game if one with the same user_wallet_address and game_name doesn't exist.
-      // - Update the html_content and updated_at if it does exist.
-      // This requires a unique constraint on (user_wallet_address, game_name) in your table.
-      // If you haven't added it, you can do so with:
-      // ALTER TABLE user_editable_games ADD CONSTRAINT user_game_unique UNIQUE (user_wallet_address, game_name);
+      // First, ensure the user profile exists
+      const checkProfileQuery = `
+        INSERT INTO user_profiles (wallet_address, username)
+        VALUES ($1, $2)
+        ON CONFLICT (wallet_address) DO NOTHING
+        RETURNING wallet_address;
+      `;
+      
+      await pool.query(checkProfileQuery, [walletAddress, username]);
 
-      const query = `
-        INSERT INTO user_editable_games (user_wallet_address, game_name, html_content, updated_at)
-        VALUES ($1, $2, $3, NOW())
+      // Now save the game
+      const saveGameQuery = `
+        INSERT INTO user_editable_games (user_wallet_address, game_name, html_content, username, updated_at)
+        VALUES ($1, $2, $3, $4, NOW())
         ON CONFLICT (user_wallet_address, game_name) 
         DO UPDATE SET 
           html_content = EXCLUDED.html_content,
+          username = EXCLUDED.username,
           updated_at = NOW()
         RETURNING id;
       `;
 
-      const values = [walletAddress, gameName, htmlContent];
+      const values = [walletAddress, gameName, htmlContent, username];
       
-      const dbResponse = await pool.query(query, values);
+      const dbResponse = await pool.query(saveGameQuery, values);
       
       let newGameId: string | number = 'unknown';
       if (dbResponse.rows && dbResponse.rows.length > 0 && dbResponse.rows[0].id) {
         newGameId = dbResponse.rows[0].id;
       }
-      // --- END DATABASE LOGIC --- 
 
       res.status(201).json({ message: 'Game saved successfully!', gameId: newGameId });
 

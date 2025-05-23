@@ -25,6 +25,13 @@ export const games = [
   { name: 'Live Game', path: 'livegame.html', id: 'livegame' }
 ];
 
+// Add this utility function near the top of the file, after the imports
+const truncateWalletAddress = (address) => {
+  if (!address) return '';
+  if (address.length <= 12) return address; // Don't truncate if already short
+  return `${address.slice(0, 4)}...${address.slice(-4)}`;
+};
+
 export default function Layout({ children, currentGameIdFromProp, currentGameHtmlForEditor, currentSavedGameName }) {
   const router = useRouter();
   const { connected, publicKey } = useWallet();
@@ -487,10 +494,6 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
         if (currentGameIdFromProp && currentSavedGameName) {
           // Editing an existing, loaded game. Use its current name, do not prompt.
           gameNameToPublish = currentSavedGameName;
-          // Optionally, add a specific confirmation for updating an existing game, e.g.:
-          // if (!window.confirm(`This will update your existing game: "${currentSavedGameName}". Continue?`)) {
-          //   return;
-          // }
         } else {
           // New game or editing a local draft not yet saved with an ID.
           let promptedName = prompt("Enter a name for your game:", `My Custom Game - ${new Date().toLocaleTimeString()}`);
@@ -509,7 +512,8 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
         const payload = {
           walletAddress: publicKey.toBase58(),
           gameName: gameNameToPublish,
-          htmlContent: draftHTML, 
+          htmlContent: draftHTML,
+          username: userProfile?.username || publicKey.toBase58() // Use wallet address as fallback username
         };
 
         try {
@@ -657,7 +661,8 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
     publicKey,
     currentGameHtmlForEditor,
     currentGameIdFromProp,
-    currentSavedGameName
+    currentSavedGameName,
+    userProfile
   ]); 
 
   return (
@@ -707,7 +712,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                     className="w-8 h-8 rounded-full object-cover border-2 border-pink-400"
                   />
                 )}
-                <span>Profile</span>
+                <span>{userProfile?.username ? truncateWalletAddress(userProfile.username) : truncateWalletAddress(publicKey.toBase58())}</span>
               </a>
             </Link>
           )}
