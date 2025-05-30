@@ -68,6 +68,9 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
   const [playerName, setPlayerName] = useState('');
   const [showCodeEditor, setShowCodeEditor] = useState(false); // State for editor visibility
   const [editorCode, setEditorCode] = useState(''); // State to hold code for the editor
+  const highlightedCodeRef = useRef(null); // Ref for the <code> element for Prism
+  const codeEditorTextareaRef = useRef(null); // Ref for the textarea
+  const highlightedCodeContainerRef = useRef(null); // Ref for the <pre> container for scrolling
 
   // --- Handler Functions for Modal Buttons ---
   const openCodeEditor = () => {
@@ -293,6 +296,37 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
     }
   };
   // --- End Handler Functions ---
+
+  useEffect(() => {
+    // Effect for Prism.js highlighting and scroll synchronization
+    if (showCodeEditor && highlightedCodeRef.current && typeof Prism !== 'undefined') {
+      if (codeEditorTextareaRef.current) {
+        highlightedCodeRef.current.textContent = codeEditorTextareaRef.current.value;
+      }
+      Prism.highlightElement(highlightedCodeRef.current);
+    }
+
+    // Scroll synchronization logic
+    const textareaElement = codeEditorTextareaRef.current;
+    const preElement = highlightedCodeContainerRef.current;
+
+    const syncScroll = () => {
+      if (textareaElement && preElement) {
+        preElement.scrollTop = textareaElement.scrollTop;
+        preElement.scrollLeft = textareaElement.scrollLeft;
+      }
+    };
+
+    if (showCodeEditor && textareaElement) {
+      textareaElement.addEventListener('scroll', syncScroll);
+    }
+
+    return () => {
+      if (textareaElement) {
+        textareaElement.removeEventListener('scroll', syncScroll);
+      }
+    };
+  }, [editorCode, showCodeEditor]); // Re-run when editor is shown or code changes, or editor visibility changes
 
   // Fetch user profile data
   const fetchUserProfile = useCallback(async () => {
@@ -632,7 +666,18 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
         <meta name="description" content={currentGame ? `Play ${currentGame.name}` : "Select a game to play"} />
         <script src="https://cdn.tailwindcss.com" async></script>
         <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
+        {/* Prism.js CSS (okaidia theme chosen for dark mode compatibility) */}
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
       </Head>
+
+      {/* Prism.js Core and HTML language component - ensure they load after page content or are handled appropriately */}
+      {/* It's often better to put scripts at the end of the body, but for Next.js Head, this is one way. */}
+      {/* We might need to ensure Prism is available before calling its methods. */}
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" async></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup-templating.min.js" async></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-html.min.js" async></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js" async></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js" async></script>
 
       <header className="fixed top-0 left-0 right-0 bg-[#181a1b] text-white p-4 flex justify-between items-center z-50 shadow-lg">
         <div className="flex items-center">
@@ -746,15 +791,29 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
             {/* Left Column: Chat and Controls */}
             <div className="w-full md:w-1/3 flex flex-col p-4 space-y-4 border-r border-gray-700 overflow-y-auto">
               {showCodeEditor ? (
-                // Code Editor View
-                <div id="liveGameManualEditor" className="flex-grow flex flex-col space-y-3">
-                  <textarea 
-                    className="w-full flex-grow p-3 rounded bg-gray-900 border border-gray-700 text-white placeholder-gray-500 focus:ring-pink-500 focus:border-pink-500 resize-none font-mono text-sm"
-                    value={editorCode}
-                    onChange={(e) => setEditorCode(e.target.value)}
-                    placeholder="Enter your HTML game code here..."
-                  ></textarea>
-                  <div className="flex items-center justify-end space-x-2">
+                // Code Editor View with Prism.js highlighting
+                <div id="liveGameManualEditor" className="flex-grow flex flex-col space-y-3 relative h-full">
+                  <div className="relative w-full flex-grow h-full">
+                    <textarea 
+                      ref={codeEditorTextareaRef}
+                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-transparent border border-gray-700 text-transparent caret-pink-400 placeholder-gray-500 focus:ring-pink-500 focus:border-pink-500 resize-none font-mono text-sm leading-relaxed z-10 whitespace-pre overflow-auto"
+                      value={editorCode}
+                      onChange={(e) => setEditorCode(e.target.value)}
+                      placeholder="Enter your HTML game code here..."
+                      spellCheck="false"
+                    />
+                    <pre 
+                      ref={highlightedCodeContainerRef}
+                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-gray-900 border border-gray-700 text-sm leading-relaxed m-0 overflow-auto pointer-events-none whitespace-pre-wrap"
+                      aria-hidden="true"
+                    >
+                      <code ref={highlightedCodeRef} className="language-html whitespace-pre-wrap">
+                        {/* Code will be injected here by useEffect and Prism */}
+                        {editorCode} {/* Initial content before Prism runs */}
+                      </code>
+                    </pre>
+                  </div>
+                  <div className="flex items-center justify-end space-x-2 pt-2">
                     <button 
                       type="button" 
                       title="Cancel Edit"
