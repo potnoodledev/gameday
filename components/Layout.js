@@ -52,6 +52,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
   const llmChatInputRef = useRef(null);
   const publishLiveGameBtnRef = useRef(null);
   const resetLiveGameBtnRef = useRef(null);
+  const viewLiveGameCodeBtnRef = useRef(null);
   const liveGamePreviewRef = useRef(null);
   const deleteLiveGameBtnRef = useRef(null);
   const settingsBtnRef = useRef(null);
@@ -65,6 +66,233 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
   // Store current game in state, to be derived from prop or router query
   const [currentGame, setCurrentGame] = useState(null);
   const [playerName, setPlayerName] = useState('');
+  const [showCodeEditor, setShowCodeEditor] = useState(false); // State for editor visibility
+  const [editorCode, setEditorCode] = useState(''); // State to hold code for the editor
+
+  // --- Handler Functions for Modal Buttons ---
+  const openCodeEditor = () => {
+    const savedHtml = localStorage.getItem(LIVE_GAME_DRAFT_KEY);
+    if (savedHtml && savedHtml.trim() !== '') {
+      setEditorCode(savedHtml);
+    } else {
+      setEditorCode('<!-- No code found in local storage. Start typing here! -->');
+    }
+    setShowCodeEditor(true);
+  };
+
+  const handleResetGame = () => {
+    if (!liveGamePreviewRef.current || !llmChatHistoryRef.current || !llmChatInputRef.current) return;
+    if (window.confirm("Are you sure? This will reset the game to the default version")) {
+      localStorage.removeItem(LIVE_GAME_DRAFT_KEY);
+      liveGamePreviewRef.current.removeAttribute('srcdoc');
+      const originalSrc = '/games/livegame.html';
+      liveGamePreviewRef.current.src = `${originalSrc}?t=${new Date().getTime()}`;
+      llmChatHistoryRef.current.innerHTML = '';
+      llmChatInputRef.current.value = '';
+    }
+  };
+
+  const handlePublishGame = async () => {
+    if (!liveGamePreviewRef.current || !publishLiveGameBtnRef.current) return;
+
+    const draftHTML = liveGamePreviewRef.current.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
+    if (!draftHTML || draftHTML.trim() === '' || draftHTML.trim() === '<!-- Start coding here -->') {
+      alert('There is no game content to publish. Try editing the game first!');
+      return;
+    }
+    if (!connected || !publicKey) {
+      alert('Please connect your wallet to publish a game.');
+      return;
+    }
+    let gameNameToPublish;
+    if (currentGameIdFromProp && currentSavedGameName) {
+      gameNameToPublish = currentSavedGameName;
+    } else {
+      let promptedName = prompt("Enter a name for your game:", `My Custom Game - ${new Date().toLocaleTimeString()}`);
+      if (!promptedName) {
+        alert('Publishing cancelled. A game name is required.');
+        return;
+      }
+      promptedName = promptedName.trim();
+      if (!promptedName) {
+        alert('Invalid game name. Publishing cancelled.');
+        return;
+      }
+      gameNameToPublish = promptedName;
+    }
+    const payload = {
+      walletAddress: publicKey.toBase58(),
+      gameName: gameNameToPublish,
+      htmlContent: draftHTML,
+      username: userProfile?.username || publicKey.toBase58()
+    };
+    const publishButton = publishLiveGameBtnRef.current;
+    try {
+      publishButton.disabled = true;
+      publishButton.textContent = 'Publishing...';
+      const response = await fetch('/api/save-user-game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to publish game. Server returned an error.' }));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      }
+      const result = await response.json();
+      alert(result.message || 'Game published successfully! It should now appear in your "My Games" list.');
+    } catch (error) {
+      console.error('Error publishing game:', error);
+      alert(`Error publishing game: ${error.message}`);
+    } finally {
+      publishButton.disabled = false;
+      publishButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.344 2.25A4.5 4.5 0 0118 19.5a4.5 4.5 0 01-3.75-3.75H9.75A4.5 4.5 0 016.75 19.5z" /></svg>`;
+    }
+  };
+
+  const handleDeleteGame = async () => {
+    if (!deleteLiveGameBtnRef.current || !liveGamePreviewRef.current || !llmChatHistoryRef.current || !llmChatInputRef.current || !liveGameEditorModalRef.current) return;
+    if (!currentGameIdFromProp || !publicKey) {
+      alert('Cannot delete game: Missing game ID or wallet connection.');
+      return;
+    }
+    if (window.confirm('Are you sure you want to permanently delete this game? This action cannot be undone.')) {
+      try {
+        const response = await fetch('/api/delete-user-game', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gameId: currentGameIdFromProp,
+            walletAddress: publicKey.toBase58(),
+          }),
+        });
+        const result = await response.json();
+        if (response.ok) {
+          alert(result.message || 'Game deleted successfully.');
+          localStorage.removeItem(LIVE_GAME_DRAFT_KEY);
+          liveGamePreviewRef.current.removeAttribute('srcdoc');
+          liveGamePreviewRef.current.src = `/games/livegame.html?t=${Date.now()}`;
+          llmChatHistoryRef.current.innerHTML = '';
+          llmChatInputRef.current.value = '';
+          liveGameEditorModalRef.current.style.display = 'none';
+          router.push('/');
+        } else {
+          throw new Error(result.error || 'Failed to delete game.');
+        }
+      } catch (error) {
+        console.error('Error deleting game:', error);
+        alert(`Error: ${error.message}`);
+      }
+    }
+  };
+
+  const handleLlmFormSubmit = async (e) => {
+    e.preventDefault();
+    if (!llmChatFormRef.current || !llmChatHistoryRef.current || !llmChatInputRef.current || !liveGamePreviewRef.current) return;
+
+    const llmChatInput = llmChatInputRef.current;
+    const llmChatHistory = llmChatHistoryRef.current;
+    const liveGamePreview = liveGamePreviewRef.current;
+    const userMessage = llmChatInput.value.trim();
+    if (!userMessage) return;
+
+    const userMsgDiv = document.createElement('div');
+    userMsgDiv.className = 'mb-2 p-2 bg-blue-600 rounded-lg self-end text-right text-white';
+    userMsgDiv.textContent = `You: ${userMessage}`;
+    llmChatHistory.appendChild(userMsgDiv);
+    llmChatInput.value = '';
+
+    const aiMsgDiv = document.createElement('div');
+    aiMsgDiv.className = 'mb-2 p-2 bg-gray-700 rounded-lg self-start relative group text-white';
+    const aiPre = document.createElement('pre');
+    aiPre.className = 'whitespace-pre-wrap break-words';
+    aiPre.textContent = 'PotNoodleDev: Now cooking up a game...';
+    aiMsgDiv.appendChild(aiPre);
+    llmChatHistory.appendChild(aiMsgDiv);
+    llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+
+    let accumulatedCode = "";
+    try {
+      const currentCodeBase = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
+      const isEditingExistingGame = currentCodeBase && currentCodeBase.trim() !== '' && currentCodeBase.trim() !== '<!-- Start coding here -->';
+      let systemPrompt;
+      if (isEditingExistingGame && currentGameHtmlForEditor) {
+        systemPrompt = `The user wants to change their existing game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
+      } else if (isEditingExistingGame) {
+        systemPrompt = `The user is continuing to edit their game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
+      } else {
+        systemPrompt = `The user wants to make a new game. Create a new game based on this request: ${userMessage}`;
+      }
+      const response = await fetch('/api/generate-game-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: systemPrompt,
+          currentCode: currentCodeBase || '<!-- Start coding here -->',
+        }),
+      });
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/plain')) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        aiPre.textContent = "PotNoodleDev: ";
+        let firstChunk = true;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunkText = decoder.decode(value);
+          if (firstChunk) firstChunk = false;
+          aiPre.textContent += chunkText;
+          accumulatedCode += chunkText;
+          llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+        }
+      } else if (contentType && contentType.includes('application/json')) {
+        const responseText = await response.text();
+        if (!responseText) throw new Error('AI returned an empty JSON response.');
+        try {
+          const data = JSON.parse(responseText);
+          if (response.ok) {
+            if (data.newCode) {
+              aiPre.textContent = "PotNoodleDev: " + data.newCode;
+              accumulatedCode = data.newCode;
+            } else {
+              throw new Error('AI response did not contain newCode.');
+            }
+          } else {
+            throw new Error(data.error || 'Unknown error from AI (JSON)');
+          }
+        } catch (parseError) {
+          throw new Error(`Failed to parse AI JSON response: ${parseError.message}. Response was: ${responseText}`);
+        }
+      } else {
+        const textResponse = await response.text();
+        aiPre.textContent = `Unexpected response type: ${contentType}\n${textResponse}`;
+        throw new Error(`Unexpected response type: ${contentType}`);
+      }
+      let cleanedCode = accumulatedCode.replace(/^```html\n?/i, '').replace(/\n?```$/, '').replace(/^```\n?/i, '').replace(/\n?```$/, '').trim();
+      if (cleanedCode && liveGamePreview) {
+        liveGamePreview.srcdoc = cleanedCode;
+        localStorage.setItem(LIVE_GAME_DRAFT_KEY, cleanedCode);
+      } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode && accumulatedCode.length > 0) {
+        aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated content that was cleaned to empty. Original might have been only markdown fences.)";
+      } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode) {
+        aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated empty content)";
+      }
+    } catch (error) {
+      console.error('Error calling LLM API:', error);
+      if (aiPre) {
+        aiPre.textContent = `Error: ${error.message}`;
+        aiPre.style.color = 'red';
+      } else {
+        const errorMsgDiv = document.createElement('div');
+        errorMsgDiv.textContent = `Error: ${error.message}`;
+        errorMsgDiv.style.color = 'red';
+        llmChatHistory.appendChild(errorMsgDiv);
+      }
+      llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
+    }
+  };
+  // --- End Handler Functions ---
 
   // Fetch user profile data
   const fetchUserProfile = useCallback(async () => {
@@ -153,13 +381,14 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
     const llmChatInput = llmChatInputRef.current;
     const publishLiveGameBtn = publishLiveGameBtnRef.current;
     const resetLiveGameBtn = resetLiveGameBtnRef.current;
+    const viewLiveGameCodeBtn = viewLiveGameCodeBtnRef.current;
     const liveGamePreview = liveGamePreviewRef.current;
     const deleteLiveGameBtn = deleteLiveGameBtnRef.current;
     const settingsBtn = settingsBtnRef.current;
     const settingsMenu = settingsMenuRef.current;
     const closeSettingsMenu = closeSettingsMenuRef.current;
     const gameSelect = gameSelectRef.current;
-    const nameInput = nameInputRef.current; // Ref already declared
+    const nameInput = nameInputRef.current;
     const saveSettings = saveSettingsRef.current;
 
     // Simplified check, assumes refs are available when this effect runs.
@@ -277,286 +506,44 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
       }
     };
 
-    // NEW: settingsBtn (now the + button) opens the live game editor
-    if (settingsBtn) settingsBtn.onclick = openLiveGameEditor;
+    // Ensure settingsBtn (plus/pencil button) opens the live game editor
+    if (settingsBtnRef.current) {
+        settingsBtnRef.current.onclick = openLiveGameEditor;
+    }
 
-    if (closeSettingsMenu) closeSettingsMenu.onclick = () => {
-        if(settingsMenu) settingsMenu.style.display = 'none';
-    };
-    if (saveSettings) saveSettings.onclick = () => {
-        const newName = nameInput.value;
-        if (newName) {
-            setPlayerName(newName); // Update React state
-            localStorage.setItem('playerName', newName);
-        }
-        const selectedGameIdInSettings = gameSelect.value;
-        if (selectedGameIdInSettings && (!currentGame || selectedGameIdInSettings !== currentGame.id)) {
-            router.push(`/game/${selectedGameIdInSettings}`);
-        }
-        if(settingsMenu) settingsMenu.style.display = 'none';
-        if (socket && currentGame && newName) socket.emit('playerJoined', { name: newName, game: currentGame.name }); 
-    };
+    // Logic for editLiveGameBtn (the old pencil icon, if it still exists and is used)
+    if (editLiveGameBtnRef.current) {
+        editLiveGameBtnRef.current.onclick = openLiveGameEditor;
+    }
 
-    if (editLiveGameBtn) editLiveGameBtn.onclick = openLiveGameEditor; // Old pencil button also uses the same action
-
-    if (closeLiveGameEditor) closeLiveGameEditor.onclick = () => {
-      if (liveGameEditorModalRef.current) liveGameEditorModalRef.current.style.display = 'none';
-    };
-
-    if (liveGameEditorModal) {
-      // Remove the radio button group for model selection
-      const modelSelectionRadios = liveGameEditorModal.querySelectorAll('.model-selection-radios');
+    // Logic for closing the editor modal
+    if (closeLiveGameEditorRef.current && liveGameEditorModalRef.current) {
+        closeLiveGameEditorRef.current.onclick = () => {
+            if (liveGameEditorModalRef.current) liveGameEditorModalRef.current.style.display = 'none';
+        };
+    }
+    
+    // Remove model selection radios if they were part of a previous version
+    if (liveGameEditorModalRef.current) {
+      const modelSelectionRadios = liveGameEditorModalRef.current.querySelectorAll('.model-selection-radios');
       modelSelectionRadios.forEach(radioGroup => radioGroup.remove());
     }
 
-    // Ensure the llmChatForm onsubmit is correctly defined and prevents default page refresh
-    if (llmChatFormRef.current && llmChatHistoryRef.current && llmChatInputRef.current && liveGamePreviewRef.current) {
-      llmChatFormRef.current.onsubmit = async (e) => {
-        e.preventDefault(); // Crucial: Prevents page refresh on form submission
-        
-        const llmChatInput = llmChatInputRef.current;
-        const llmChatHistory = llmChatHistoryRef.current;
-        const liveGamePreview = liveGamePreviewRef.current; // Corrected from liveGamePreviewRef.current.current
-
-        const userMessage = llmChatInput.value.trim();
-        if (!userMessage) return;
-
-        const userMsgDiv = document.createElement('div');
-        userMsgDiv.className = 'mb-2 p-2 bg-blue-600 rounded-lg self-end text-right text-white'; // Added text-white for better contrast
-        userMsgDiv.textContent = `You: ${userMessage}`;
-        llmChatHistory.appendChild(userMsgDiv);
-        llmChatInput.value = '';
-
-        const aiMsgDiv = document.createElement('div');
-        aiMsgDiv.className = 'mb-2 p-2 bg-gray-700 rounded-lg self-start relative group text-white'; // Added text-white
-        const aiPre = document.createElement('pre');
-        aiPre.className = 'whitespace-pre-wrap break-words';
-        aiPre.textContent = 'PotNoodleDev: Now cooking up a game...';
-        aiMsgDiv.appendChild(aiPre);
-        llmChatHistory.appendChild(aiMsgDiv);
-        llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
-
-        let accumulatedCode = "";
-
-        try {
-          // Determine the base prompt based on whether we are editing an existing game
-          const currentCodeBase = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
-          const isEditingExistingGame = currentCodeBase && currentCodeBase.trim() !== '' && currentCodeBase.trim() !== '<!-- Start coding here -->';
-          
-          let systemPrompt;
-          if (isEditingExistingGame && currentGameHtmlForEditor) { // Prioritize if editor was opened with game from URL
-            systemPrompt = `The user wants to change their existing game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
-          } else if (isEditingExistingGame) {
-            systemPrompt = `The user is continuing to edit their game. The current game code is provided. Apply the following change to the existing code: ${userMessage}`;
-          } else {
-            systemPrompt = `The user wants to make a new game. Create a new game based on this request: ${userMessage}`;
-          }
-
-          const response = await fetch('/api/generate-game-update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              prompt: systemPrompt, // Use the dynamically generated systemPrompt
-              currentCode: currentCodeBase || '<!-- Start coding here -->', // Ensure currentCode is always passed
-            }),
-          });
-
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('text/plain')) {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            aiPre.textContent = "PotNoodleDev: "; // Clear placeholder, add prefix
-            let firstChunk = true;
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              const chunkText = decoder.decode(value); 
-              if (firstChunk) {
-                firstChunk = false;
-              }
-              aiPre.textContent += chunkText; 
-              accumulatedCode += chunkText;
-              llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
-            }
-          } else if (contentType && contentType.includes('application/json')) {
-            const responseText = await response.text();
-            if (!responseText) {
-                throw new Error('AI returned an empty JSON response.');
-            }
-            try {
-                const data = JSON.parse(responseText);
-                if (response.ok) {
-                    if (data.newCode) {
-                        aiPre.textContent = "PotNoodleDev: " + data.newCode;
-                        accumulatedCode = data.newCode;
-                    } else {
-                        throw new Error('AI response did not contain newCode.');
-                    }
-                } else {
-                    throw new Error(data.error || 'Unknown error from AI (JSON)');
-                }
-            } catch (parseError) {
-                throw new Error(`Failed to parse AI JSON response: ${parseError.message}. Response was: ${responseText}`);
-            }
-          } else {
-            const textResponse = await response.text();
-            aiPre.textContent = `Unexpected response type: ${contentType}\n${textResponse}`;
-            throw new Error(`Unexpected response type: ${contentType}`);
-          }
-
-          let cleanedCode = accumulatedCode;
-          // Remove markdown code block fences if present
-          cleanedCode = cleanedCode.replace(/^```html\n?/i, '').replace(/\n?```$/, '');
-          // Fallback for generic code blocks if html wasn't specified
-          cleanedCode = cleanedCode.replace(/^```\n?/i, '').replace(/\n?```$/, '');
-          cleanedCode = cleanedCode.trim();
-
-          if (cleanedCode && liveGamePreview) {
-            liveGamePreview.srcdoc = cleanedCode;
-            localStorage.setItem(LIVE_GAME_DRAFT_KEY, cleanedCode);
-          } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode && accumulatedCode.length > 0) {
-            // If cleaning resulted in empty code but there was original content, indicate it
-            aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated content that was cleaned to empty. Original might have been only markdown fences.)";
-          } else if (!aiPre.textContent.toLowerCase().includes('error') && !cleanedCode) {
-            aiPre.textContent += (aiPre.textContent.endsWith("PotNoodleDev: ") ? '' : '\n') + "(AI generated empty content)";
-          }
-
-        } catch (error) {
-          console.error('Error calling LLM API:', error);
-          if (aiPre) {
-            aiPre.textContent = `Error: ${error.message}`;
-            aiPre.style.color = 'red';
-          } else {
-            const errorMsgDiv = document.createElement('div');
-            errorMsgDiv.textContent = `Error: ${error.message}`;
-            errorMsgDiv.style.color = 'red';
-            llmChatHistory.appendChild(errorMsgDiv);
-          }
-          llmChatHistory.scrollTop = llmChatHistory.scrollHeight;
-        }
-      };
-
-      // Add keydown listener to chat input for Enter submission
-      if (llmChatInputRef.current && llmChatFormRef.current) {
+    // Add keydown listener to chat input for Enter submission
+    if (llmChatInputRef.current && llmChatFormRef.current) {
         llmChatInputRef.current.onkeydown = (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault(); // Prevent newline
-            if (llmChatFormRef.current) {
-              // Modern way to programmatically submit a form, triggering onsubmit
-              llmChatFormRef.current.requestSubmit(); 
-            }
+            e.preventDefault(); 
+            // Directly call the handler, ensuring the event object is passed for preventDefault within the handler
+            const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+            llmChatFormRef.current.dispatchEvent(submitEvent);
           }
         };
-      }
     }
 
-    if (resetLiveGameBtn && liveGamePreview && llmChatHistory) {
-      resetLiveGameBtn.onclick = () => {
-        // Add confirmation dialog
-        if (window.confirm("Are you sure? This will reset the game to the default version")) {
-          localStorage.removeItem(LIVE_GAME_DRAFT_KEY);
-          if (liveGamePreview) {
-            liveGamePreview.removeAttribute('srcdoc'); // Clear current srcdoc to ensure src reloads
-            const originalSrc = '/games/livegame.html'; 
-            liveGamePreview.src = `${originalSrc}?t=${new Date().getTime()}`;
-          }
-          if (llmChatHistory) {
-            llmChatHistory.innerHTML = ''; // Clear chat history
-          }
-          if (llmChatInput) {
-            llmChatInput.value = ''; // Clear the input field as well
-          }
-        }
-      };
-    }
-
-    // Updated Publish button logic to save to DB
-    if (publishLiveGameBtnRef.current && liveGamePreviewRef.current && llmChatInputRef.current) {
-      publishLiveGameBtnRef.current.onclick = async () => {
-        const liveGamePreview = liveGamePreviewRef.current;
-        const draftHTML = liveGamePreview.srcdoc || localStorage.getItem(LIVE_GAME_DRAFT_KEY) || '';
-
-        if (!draftHTML || draftHTML.trim() === '' || draftHTML.trim() === '<!-- Start coding here -->') {
-          alert('There is no game content to publish. Try editing the game first!');
-          return;
-        }
-
-        if (!connected || !publicKey) {
-          alert('Please connect your wallet to publish a game.');
-          return;
-        }
-
-        let gameNameToPublish;
-
-        if (currentGameIdFromProp && currentSavedGameName) {
-          // Editing an existing, loaded game. Use its current name, do not prompt.
-          gameNameToPublish = currentSavedGameName;
-        } else {
-          // New game or editing a local draft not yet saved with an ID.
-          let promptedName = prompt("Enter a name for your game:", `My Custom Game - ${new Date().toLocaleTimeString()}`);
-          if (!promptedName) { 
-            alert('Publishing cancelled. A game name is required.');
-            return;
-          }
-          promptedName = promptedName.trim();
-          if (!promptedName) {
-              alert('Invalid game name. Publishing cancelled.');
-              return;
-          }
-          gameNameToPublish = promptedName;
-        }
-
-        const payload = {
-          walletAddress: publicKey.toBase58(),
-          gameName: gameNameToPublish,
-          htmlContent: draftHTML,
-          username: userProfile?.username || publicKey.toBase58() // Use wallet address as fallback username
-        };
-
-        try {
-          // Show some loading state on the button if desired
-          publishLiveGameBtnRef.current.disabled = true;
-          publishLiveGameBtnRef.current.textContent = 'Publishing...'; // Or change icon to a spinner
-
-          const response = await fetch('/api/save-user-game', {
-                method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Failed to publish game. Server returned an error.' }));
-            throw new Error(errorData.message || `Server error: ${response.status}`);
-          }
-
-            const result = await response.json();
-          alert(result.message || 'Game published successfully! It should now appear in your \"My Games\" list.');
-          // Optionally, you could close the editor or refresh parts of the UI
-          // For example, if the main page lists user games, you might want to trigger a refresh there.
-
-        } catch (error) {
-          console.error('Error publishing game:', error);
-          alert(`Error publishing game: ${error.message}`);
-        } finally {
-          // Reset button state
-          if (publishLiveGameBtnRef.current) {
-            publishLiveGameBtnRef.current.disabled = false;
-            // Restore icon if you changed it to text, or re-enable the SVG icon
-            publishLiveGameBtnRef.current.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.344 2.25A4.5 4.5 0 0118 19.5a4.5 4.5 0 01-3.75-3.75H9.75A4.5 4.5 0 016.75 19.5z" /></svg>`;
-          }
-        }
-      };
-    }
-
-    // Update button appearance based on currentGameHtmlForEditor
+    // Update button appearance for settingsBtn based on currentGameHtmlForEditor
     if (settingsBtnRef.current) {
       const btn = settingsBtnRef.current;
-      // Define SVGs here for clarity or ensure they are accessible
       const plusIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" class="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>`;
       const pencilIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" class="w-7 h-7"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
 
@@ -571,7 +558,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
       }
     }
 
-    // Update editor title text
+    // Update editor title text based on currentGameHtmlForEditor
     if (liveGameEditorTitleRef.current) {
       if (currentGameHtmlForEditor) {
         liveGameEditorTitleRef.current.textContent = "Ask PotNoodleDev to change the game";
@@ -580,69 +567,40 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
       }
     }
 
-    // Conditionally show/hide delete button
+    // Conditionally show/hide delete button (this should use the handleDeleteGame which has its own internal logic now)
     if (deleteLiveGameBtnRef.current) {
-      if (currentGameIdFromProp && currentGameHtmlForEditor) { // Only show if editing a game from a page (implies it might be a saved game)
-        deleteLiveGameBtnRef.current.style.display = 'flex'; // Or 'inline-flex' based on styling needs
+      if (currentGameIdFromProp && currentGameHtmlForEditor) {
+        deleteLiveGameBtnRef.current.style.display = 'flex';
       } else {
         deleteLiveGameBtnRef.current.style.display = 'none';
       }
     }
-
-    // Define onClick handler for the delete button
-    const handleDeleteGame = async () => {
-      if (!currentGameIdFromProp || !publicKey) {
-        alert('Cannot delete game: Missing game ID or wallet connection.');
-        return;
-      }
-
-      if (window.confirm('Are you sure you want to permanently delete this game? This action cannot be undone.')) {
-        try {
-          const response = await fetch('/api/delete-user-game', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              gameId: currentGameIdFromProp,
-              walletAddress: publicKey.toBase58(),
-            }),
-          });
-
-          const result = await response.json();
-
-          if (response.ok) {
-            alert(result.message || 'Game deleted successfully.');
-            localStorage.removeItem(LIVE_GAME_DRAFT_KEY);
-            if (liveGamePreviewRef.current) {
-              liveGamePreviewRef.current.removeAttribute('srcdoc');
-              liveGamePreviewRef.current.src = `/games/livegame.html?t=${Date.now()}`;
-            }
-            if (llmChatHistoryRef.current) {
-              llmChatHistoryRef.current.innerHTML = '';
-            }
-            if (llmChatInputRef.current) {
-              llmChatInputRef.current.value = '';
-            }
-            // Close the editor modal before redirecting
-            if (liveGameEditorModalRef.current) {
-                liveGameEditorModalRef.current.style.display = 'none';
-            }
-            router.push('/'); // Redirect to home page
-          } else {
-            throw new Error(result.error || 'Failed to delete game.');
-          }
-        } catch (error) {
-          console.error('Error deleting game:', error);
-          alert(`Error: ${error.message}`);
-        }
-      }
-    };
-
-    // Assign onClick handler to the delete button
-    if (deleteLiveGameBtnRef.current) {
-      deleteLiveGameBtnRef.current.onclick = handleDeleteGame;
+    
+    // Setup for settings menu (close, save)
+    if (closeSettingsMenuRef.current && settingsMenuRef.current) {
+        closeSettingsMenuRef.current.onclick = () => {
+            if(settingsMenuRef.current) settingsMenuRef.current.style.display = 'none';
+        };
     }
+    if (saveSettingsRef.current && nameInputRef.current && gameSelectRef.current && settingsMenuRef.current) {
+        saveSettingsRef.current.onclick = () => {
+            const newName = nameInputRef.current.value;
+            if (newName) {
+                setPlayerName(newName);
+                localStorage.setItem('playerName', newName);
+            }
+            const selectedGameIdInSettings = gameSelectRef.current.value;
+            if (selectedGameIdInSettings && (!currentGame || selectedGameIdInSettings !== currentGame.id)) {
+                router.push(`/game/${selectedGameIdInSettings}`);
+            }
+            if(settingsMenuRef.current) settingsMenuRef.current.style.display = 'none';
+            // if (socket && currentGame && newName) socket.emit('playerJoined', { name: newName, game: currentGame.name }); 
+            // Socket emit for playerJoined is complex, ensure it's handled correctly if newName or currentGame changes
+        };
+    }
+
+    // Original direct DOM manipulations for editLiveGameBtn, closeLiveGameEditor, etc., are now mostly handled by React state or direct JSX handlers.
+    // The remaining ones like modelSelectionRadios.forEach(radioGroup => radioGroup.remove()); can stay if they are one-time setups.
 
     return () => {
       window.removeEventListener('message', handleWindowMessage);
@@ -787,74 +745,128 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
           <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
             {/* Left Column: Chat and Controls */}
             <div className="w-full md:w-1/3 flex flex-col p-4 space-y-4 border-r border-gray-700 overflow-y-auto">
-              <div 
-                id="liveGameEditorTitle"
-                ref={liveGameEditorTitleRef}
-                className="text-lg font-semibold text-pink-300"
-              >
-                Ask PotNoodleDev to make a game
-              </div>
-              <div 
-                id="llmChatHistory" 
-                ref={llmChatHistoryRef} 
-                className="flex-grow min-h-[200px] bg-gray-900 rounded p-3 text-sm font-mono overflow-y-auto border border-gray-700 shadow-inner"
-              >
-                {/* Chat messages will appear here */}
-              </div>
-              <form id="llmChatForm" ref={llmChatFormRef} className="space-y-3">
-                <textarea 
-                  id="llmChatInput" 
-                  ref={llmChatInputRef} 
-                  className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:ring-pink-500 focus:border-pink-500 resize-none" 
-                  placeholder="Describe the game or change you want..." 
-                  rows="3"
-                ></textarea>
-                <div className="flex items-center justify-end space-x-2">
-                  <button 
-                    type="button" 
-                    title="Delete Game"
-                    id="deleteLiveGameBtn" 
-                    ref={deleteLiveGameBtnRef} 
-                    className="p-2.5 bg-gray-600 text-white rounded-md shadow hover:bg-gray-700 transition flex items-center justify-center"
-                    style={{display: 'none'}} // Hidden by default
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c1.153 0 2.243.096 3.298.286m7.096 0c.23.02.458.04.682.06M5.28 5.79A48.074 48.074 0 018.084 5.5H11m-5.72 0c-.04.166-.078.334-.114.504m11.422 0a48.074 48.074 0 00-3.306-.286m0 0L12.995 3.695A2.25 2.25 0 0010.996 2.25H9.004A2.25 2.25 0 007.005 3.695L6.28 5.79M12 12.25v4.5m0-4.5H12.06" />
-                    </svg>
-                  </button>
-                  <button 
-                    type="button" 
-                    title="Reset Game"
-                    id="resetLiveGameBtn" 
-                    ref={resetLiveGameBtnRef} 
-                    className="p-2.5 bg-red-600 text-white rounded-md shadow hover:bg-red-700 transition flex items-center justify-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                    </svg>
-                  </button>
-                  <button 
-                    type="button" 
-                    title="Publish Game"
-                    id="publishLiveGameBtn" 
-                    ref={publishLiveGameBtnRef} 
-                    className="p-2.5 bg-green-600 text-white rounded-md shadow hover:bg-green-700 transition flex items-center justify-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.344 2.25A4.5 4.5 0 0118 19.5a4.5 4.5 0 01-3.75-3.75H9.75A4.5 4.5 0 016.75 19.5z" />
-                    </svg>
-                  </button>
-                  <button 
-                    type="submit" 
-                    title="Send Message"
-                    className="p-2.5 bg-pink-600 text-white rounded-md shadow hover:bg-pink-700 transition flex items-center justify-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                    </svg>
-                  </button>
+              {showCodeEditor ? (
+                // Code Editor View
+                <div id="liveGameManualEditor" className="flex-grow flex flex-col space-y-3">
+                  <textarea 
+                    className="w-full flex-grow p-3 rounded bg-gray-900 border border-gray-700 text-white placeholder-gray-500 focus:ring-pink-500 focus:border-pink-500 resize-none font-mono text-sm"
+                    value={editorCode}
+                    onChange={(e) => setEditorCode(e.target.value)}
+                    placeholder="Enter your HTML game code here..."
+                  ></textarea>
+                  <div className="flex items-center justify-end space-x-2">
+                    <button 
+                      type="button" 
+                      title="Cancel Edit"
+                      className="p-2.5 bg-gray-600 text-white rounded-md shadow hover:bg-gray-700 transition"
+                      onClick={() => setShowCodeEditor(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="button" 
+                      title="Save and Update Preview"
+                      className="p-2.5 bg-green-600 text-white rounded-md shadow hover:bg-green-700 transition"
+                      onClick={() => {
+                        localStorage.setItem(LIVE_GAME_DRAFT_KEY, editorCode);
+                        if (liveGamePreviewRef.current) {
+                          liveGamePreviewRef.current.srcdoc = editorCode;
+                        }
+                        setShowCodeEditor(false);
+                      }}
+                    >
+                      Save & Update Preview
+                    </button>
+                  </div>
                 </div>
-          </form>
+              ) : (
+                // Original Chat View
+                <>
+                  <div 
+                    id="liveGameEditorTitle"
+                    ref={liveGameEditorTitleRef}
+                    className="text-lg font-semibold text-pink-300"
+                  >
+                    Ask PotNoodleDev to make a game
+                  </div>
+                  <div 
+                    id="llmChatHistory" 
+                    ref={llmChatHistoryRef} 
+                    className="flex-grow min-h-[200px] bg-gray-900 rounded p-3 text-sm font-mono overflow-y-auto border border-gray-700 shadow-inner"
+                  >
+                    {/* Chat messages will appear here */}
+                  </div>
+                  <form id="llmChatForm" ref={llmChatFormRef} className="space-y-3" onSubmit={handleLlmFormSubmit}>
+                    <textarea 
+                      id="llmChatInput" 
+                      ref={llmChatInputRef} 
+                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:ring-pink-500 focus:border-pink-500 resize-none" 
+                      placeholder="Describe the game or change you want..." 
+                      rows="3"
+                    ></textarea>
+                    <div className="flex items-center justify-end space-x-2">
+                      <button 
+                        type="button" 
+                        title="Delete Game"
+                        id="deleteLiveGameBtn" 
+                        ref={deleteLiveGameBtnRef} 
+                        className="p-2.5 bg-gray-600 text-white rounded-md shadow hover:bg-gray-700 transition flex items-center justify-center"
+                        style={{display: 'none'}} // Hidden by default
+                        onClick={handleDeleteGame}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.56 0c1.153 0 2.243.096 3.298.286m7.096 0c.23.02.458.04.682.06M5.28 5.79A48.074 48.074 0 018.084 5.5H11m-5.72 0c-.04.166-.078.334-.114.504m11.422 0a48.074 48.074 0 00-3.306-.286m0 0L12.995 3.695A2.25 2.25 0 0010.996 2.25H9.004A2.25 2.25 0 007.005 3.695L6.28 5.79M12 12.25v4.5m0-4.5H12.06" />
+                        </svg>
+                      </button>
+                      <button 
+                        type="button" 
+                        title="Reset Game"
+                        id="resetLiveGameBtn" 
+                        ref={resetLiveGameBtnRef} 
+                        className="p-2.5 bg-red-600 text-white rounded-md shadow hover:bg-red-700 transition flex items-center justify-center"
+                        onClick={handleResetGame}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                      </button>
+                      <button 
+                        type="button" 
+                        title="View Local Code"
+                        id="viewLiveGameCodeBtn"
+                        ref={viewLiveGameCodeBtnRef}
+                        className="p-2.5 bg-sky-600 text-white rounded-md shadow hover:bg-sky-700 transition flex items-center justify-center"
+                        onClick={openCodeEditor}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5-10.5L1.5 12l5.25 5.25" />
+                        </svg>
+                      </button>
+                      <button 
+                        type="button" 
+                        title="Publish Game"
+                        id="publishLiveGameBtn" 
+                        ref={publishLiveGameBtnRef} 
+                        className="p-2.5 bg-green-600 text-white rounded-md shadow hover:bg-green-700 transition flex items-center justify-center"
+                        onClick={handlePublishGame}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.338-2.32 5.75 5.75 0 011.344 2.25A4.5 4.5 0 0118 19.5a4.5 4.5 0 01-3.75-3.75H9.75A4.5 4.5 0 016.75 19.5z" />
+                        </svg>
+                      </button>
+                      <button 
+                        type="submit" 
+                        title="Send Message"
+                        className="p-2.5 bg-pink-600 text-white rounded-md shadow hover:bg-pink-700 transition flex items-center justify-center"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                        </svg>
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </div>
 
             {/* Right Column: Live Preview */}
