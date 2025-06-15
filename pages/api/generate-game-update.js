@@ -1,7 +1,16 @@
 import fetch from 'node-fetch';
+import { encoding_for_model } from '@dqbd/tiktoken';
 // Dynamically import @google/genai when needed for Gemini
 
-const SYSTEM_INSTRUCTIONS_GEMINI = `You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascrip alerts. Do not include explanations, only output the HTML.`;
+const SYSTEM_INSTRUCTIONS = `You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascript alerts. Do not include explanations, only output the HTML. Always ensure that game instructions are only visible before the game starts (and/or after game over), and are hidden during gameplay so they never block the game area. Use JavaScript to toggle the visibility of the instructions container appropriately. This is required for all games so they are always playable.`;
+
+// Function to count tokens
+function countTokens(text, model = 'gpt-4') {
+  const enc = encoding_for_model(model);
+  const tokens = enc.encode(text);
+  enc.free();
+  return tokens.length;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -30,11 +39,17 @@ export default async function handler(req, res) {
     { 
       role: 'system', 
       content: modelProviderFromEnv === 'gemini' 
-        ? SYSTEM_INSTRUCTIONS_GEMINI 
-        : `You are an expert web developer. The user will describe a game or change, and you will respond with a complete HTML file implementing their request. Use tailwindcss via CDN, Google Fonts, and put all JS in a <script type=\"module\"> tag. Create the app responsive with UI optimized for mobile. Do not use javascrip alerts. Do not include explanations, only output the HTML. If existing code is provided, modify it to implement the request, otherwise create a new game from scratch. Current code:\n\n${currentCode || ''}`
+        ? SYSTEM_INSTRUCTIONS + (currentCode ? `\n\nCurrent code:\n\n${currentCode}` : '')
+        : SYSTEM_INSTRUCTIONS + (currentCode ? ` If existing code is provided, modify it to implement the request, otherwise create a new game from scratch. Current code:\n\n${currentCode}` : '')
     },
     { role: 'user', content: prompt }
   ];
+
+  // Count input tokens
+  const inputTokens = messages.reduce((acc, msg) => acc + countTokens(msg.content), 0);
+  if (verboseLogging) console.log(`Input tokens: ${inputTokens}`);
+
+  let outputTokens = 0;
 
   if (modelProviderFromEnv === 'openai') {
     try {
@@ -50,7 +65,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           model: 'gpt-4.1',
-          messages: messages.filter(m => m.role !== 'system' || m.content !== SYSTEM_INSTRUCTIONS_GEMINI),
+          messages: messages.filter(m => m.role !== 'system' || m.content !== SYSTEM_INSTRUCTIONS),
           stream: true
         })
       });
@@ -68,6 +83,7 @@ export default async function handler(req, res) {
       if (verboseLogging) console.log("OpenAI: Starting stream processing.");
       let contentGenerated = false;
       let doneProcessing = false;
+      let fullResponse = '';
 
       if (typeof response.body.on === 'function') {
         let buffer = "";
@@ -94,6 +110,7 @@ export default async function handler(req, res) {
                 const parsed = JSON.parse(dataJson);
                 if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                   const textPart = parsed.choices[0].delta.content;
+                  fullResponse += textPart;
                   if (verboseLogging) console.log(`OpenAI: Writing part to response: ${textPart.substring(0, 30)}...`);
                   res.write(textPart);
                   contentGenerated = true;
@@ -115,6 +132,12 @@ export default async function handler(req, res) {
             console.error("OpenAI: Stream ended, but no content was marked as generated and [DONE] not seen.");
           }
           if (verboseLogging) console.log("OpenAI: Finished stream processing (on end event).");
+          
+          // Count output tokens
+          outputTokens = countTokens(fullResponse);
+          if (verboseLogging) console.log(`Output tokens: ${outputTokens}`);
+          console.log(`Cost calculation - Output tokens: ${outputTokens} (GPT-4.1: $${(outputTokens/1000 * 0.03).toFixed(4)} per 1K tokens)`);
+          
           if (!res.writableEnded) {
             res.end();
           }
@@ -154,7 +177,7 @@ export default async function handler(req, res) {
       const geminiContents = [];
       geminiContents.push({
         role: 'user',
-        parts: [{ text: SYSTEM_INSTRUCTIONS_GEMINI + (currentCode ? `\n\nCurrent code:\n\n${currentCode}` : '') }]
+        parts: [{ text: SYSTEM_INSTRUCTIONS + (currentCode ? `\n\nCurrent code:\n\n${currentCode}` : '') }]
       });
       geminiContents.push({
         role: 'model',
@@ -175,6 +198,7 @@ export default async function handler(req, res) {
       });
       
       let contentGenerated = false;
+      let fullResponse = '';
       if (verboseLogging) console.log("Gemini: Starting stream processing.");
 
       if (streamResult && streamResult.stream && typeof streamResult.stream[Symbol.asyncIterator] === 'function') {
@@ -185,6 +209,7 @@ export default async function handler(req, res) {
               Array.isArray(chunk.candidates[0].content.parts)) {
             for (const part of chunk.candidates[0].content.parts) {
               if (part.text && typeof part.text === 'string') {
+                fullResponse += part.text;
                 if (verboseLogging) console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
                 res.write(part.text);
                 contentGenerated = true;
@@ -200,6 +225,7 @@ export default async function handler(req, res) {
               Array.isArray(chunk.candidates[0].content.parts)) {
             for (const part of chunk.candidates[0].content.parts) {
               if (part.text && typeof part.text === 'string') {
+                fullResponse += part.text;
                 if (verboseLogging) console.log(`Gemini: Writing part to response: ${part.text.substring(0, 30)}...`);
                 res.write(part.text);
                 contentGenerated = true;
@@ -214,6 +240,7 @@ export default async function handler(req, res) {
             Array.isArray(streamResult.candidates[0].content.parts)) {
           for (const part of streamResult.candidates[0].content.parts) {
             if (part.text && typeof part.text === 'string') {
+              fullResponse += part.text;
               if (verboseLogging) console.log(`Gemini: Writing part to response (single): ${part.text.substring(0, 30)}...`);
               res.write(part.text);
               contentGenerated = true;
@@ -228,6 +255,11 @@ export default async function handler(req, res) {
           console.error("Gemini: No content generated for stream, and headers not sent.");
           return res.status(500).json({ error: 'Gemini processed, but no content generated or extracted for stream.' });
       }
+      
+      // Count output tokens for Gemini
+      outputTokens = countTokens(fullResponse);
+      if (verboseLogging) console.log(`Output tokens: ${outputTokens}`);
+      console.log(`Cost calculation - Output tokens: ${outputTokens} (Gemini Pro: $${(outputTokens/1000 * 0.0005).toFixed(4)} per 1K tokens)`);
       
       if (verboseLogging) console.log("Gemini: Finished stream processing.");
       res.end();

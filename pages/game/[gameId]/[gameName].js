@@ -17,7 +17,7 @@ const GameDisplayPage = () => {
         setLoading(true);
         setError(null);
         try {
-          const response = await fetch(`/api/get-game-details?gameId=${gameId}`);
+          const response = await fetch(`/api/proxy?endpoint=get-game-details&gameId=${gameId}`);
           if (response.ok) {
             const data = await response.json();
             if (data.game) {

@@ -200,13 +200,13 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
     if (!userMessage) return;
 
     const userMsgDiv = document.createElement('div');
-    userMsgDiv.className = 'mb-2 p-2 bg-blue-600 rounded-lg self-end text-right text-white';
+    userMsgDiv.className = 'mb-2 p-2 rounded-lg self-end text-xs text-right text-white';
     userMsgDiv.textContent = `You: ${userMessage}`;
     llmChatHistory.appendChild(userMsgDiv);
     llmChatInput.value = '';
 
     const aiMsgDiv = document.createElement('div');
-    aiMsgDiv.className = 'mb-2 p-2 bg-gray-700 rounded-lg self-start relative group text-white';
+    aiMsgDiv.className = 'mb-2 p-2 rounded-lg self-start relative group text-xs text-white';
     const aiPre = document.createElement('pre');
     aiPre.className = 'whitespace-pre-wrap break-words';
     aiPre.textContent = 'PotNoodleDev: Now cooking up a game...';
@@ -665,7 +665,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
         <title>{currentGame ? currentGame.name : 'noods.cc'}</title>
         <meta name="description" content={currentGame ? `Play ${currentGame.name}` : "Select a game to play"} />
         <script src="https://cdn.tailwindcss.com" async></script>
-        <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fredoka:wght@400;600&display=swap" rel="stylesheet" />
+        {/* Remove conflicting Google Fonts, only use Darker Grotesque loaded globally */}
         {/* Prism.js CSS (okaidia theme chosen for dark mode compatibility) */}
         <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
       </Head>
@@ -700,11 +700,11 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
             />
           </a>
           {currentGame && (
-            <span className="ml-4 text-xl text-gray-300">| {currentGame.name}</span>
+            <span className="ml-4 text-xs text-gray-300">| {currentGame.name}</span>
           )}
         </div>
         
-        <nav className="flex items-center space-x-4">
+        <nav className="flex items-center bg-red-500 space-x-4">
           {connected && publicKey && (
             <Link href="/profile" legacyBehavior>
               <a className="hover:text-pink-400 transition duration-150 flex items-center space-x-2">
@@ -719,7 +719,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
               </a>
             </Link>
           )}
-          <WalletMultiButton />
+          <WalletMultiButton className="rounded-full py-1 px-1 text-white text-md shadow-lg border border-white/30 transition-all duration-200 bg-gradient-to-r from-[#7F4BFF] to-[#6B21A8] hover:from-[#6B21A8] hover:to-[#7F4BFF] focus:outline-none focus:ring-2 focus:ring-purple-400/60" />
         </nav>
       </header>
 
@@ -796,7 +796,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                   <div className="relative w-full flex-grow h-full">
                     <textarea 
                       ref={codeEditorTextareaRef}
-                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-transparent border border-gray-700 text-transparent caret-pink-400 placeholder-gray-500 focus:ring-pink-500 focus:border-pink-500 resize-none font-mono text-sm leading-relaxed z-10 whitespace-pre overflow-auto"
+                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-transparent border border-gray-700 text-transparent caret-pink-400 placeholder-gray-500 focus:ring-pink-500 focus:border-pink-500 resize-none font-mono text-xs leading-relaxed z-10 whitespace-pre overflow-auto"
                       value={editorCode}
                       onChange={(e) => setEditorCode(e.target.value)}
                       placeholder="Enter your HTML game code here..."
@@ -804,7 +804,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                     />
                     <pre 
                       ref={highlightedCodeContainerRef}
-                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-gray-900 border border-gray-700 text-sm leading-relaxed m-0 overflow-auto pointer-events-none whitespace-pre-wrap"
+                      className="absolute top-0 left-0 w-full h-full p-3 rounded bg-gray-900 border border-gray-700 text-xs leading-relaxed m-0 overflow-auto pointer-events-none whitespace-pre-wrap"
                       aria-hidden="true"
                     >
                       <code ref={highlightedCodeRef} className="language-html whitespace-pre-wrap">
@@ -851,7 +851,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                   <div 
                     id="llmChatHistory" 
                     ref={llmChatHistoryRef} 
-                    className="flex-grow min-h-[200px] bg-gray-900 rounded p-3 text-sm font-mono overflow-y-auto border border-gray-700 shadow-inner"
+                    className="flex-grow min-h-[200px] bg-gray-900 rounded p-3 text-xs font-mono overflow-y-auto border border-gray-700 shadow-inner"
                   >
                     {/* Chat messages will appear here */}
                   </div>
@@ -859,7 +859,7 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
                     <textarea 
                       id="llmChatInput" 
                       ref={llmChatInputRef} 
-                      className="w-full p-3 rounded bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:ring-pink-500 focus:border-pink-500 resize-none" 
+                      className="w-full p-3 rounded bg-[#1E1D47] border border-gray-600 text-xs text-white placeholder-white focus:ring-white focus:border-white resize-none" 
                       placeholder="Describe the game or change you want..." 
                       rows="3"
                     ></textarea>
@@ -929,12 +929,11 @@ export default function Layout({ children, currentGameIdFromProp, currentGameHtm
             </div>
 
             {/* Right Column: Live Preview */}
-            <div className="w-full md:w-2/3 flex flex-col p-1 bg-gray-900">
-              <div className="text-lg font-semibold text-pink-300 p-3">Live Preview</div>
+            <div className="w-full md:w-2/3 flex flex-col bg-transparent">
               <iframe 
                 id="liveGamePreview" 
                 ref={liveGamePreviewRef} 
-                className="w-full flex-grow border-2 border-gray-700 rounded-md shadow-inner" 
+                className="w-full flex-grow" 
                 src="/games/livegame.html"
               ></iframe>
             </div>

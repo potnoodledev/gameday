@@ -4,13 +4,15 @@ html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
+    font-family: 'Darker Grotesque', sans-serif;
 }
 body {
-    font-family: 'Fredoka', 'Share Tech Mono', monospace;
+    font-family: 'Darker Grotesque', sans-serif;
     background: #181a1b;
     color: #fff;
     width: 100vw;
     height: 100vh;
+    position: relative;
 }
 .game-iframe {
     width: 100vw;
@@ -43,4 +45,6 @@ body {
 /* Mobile leaderboard sheet transparency */
 #leaderboardMobileSheet .bg-\[\#23272a\] {
     background: #23272acc !important;
-} 
+}
+/* Make all borders dotted by default */
+* { border-style: dotted !important; }
